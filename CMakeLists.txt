@@ -25,5 +25,5 @@ if(GW_ENABLE_NATIVE)
     target_compile_options(gwcore PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-march=native>)
 endif()
 
-add_executable(gw20 src/main.cpp)
-target_link_libraries(gw20 PRIVATE gwcore)
+add_executable(gw src/main.cpp)
+target_link_libraries(gw PRIVATE gwcore)

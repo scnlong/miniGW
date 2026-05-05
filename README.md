@@ -35,8 +35,8 @@ The `.npy` reader currently supports C-order, little-endian `float64` arrays onl
 ## Build
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+cmake -S . -B build -C cmake_install.cmake
+cmake --build build -j 4
 ```
 
 ## Run
