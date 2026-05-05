@@ -1,0 +1,25 @@
+# build directories
+build/
+
+# object / binary files
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+
+# CMake generated files
+CMakeCache.txt
+
+# editor / OS files
+.vscode/
+*.swp
+.DS_Store
+tags
+
+# logs / temporary files
+*.log
+*.tmp
