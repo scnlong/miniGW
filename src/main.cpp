@@ -14,6 +14,7 @@ namespace {
 
 struct Cli {
     std::string input_dir{"."};
+    std::string output_dir{"./gw_output"};
     std::size_t freq_points{200};
     std::size_t pade_params{16};
     std::optional<std::size_t> selected_state_1based{5};
@@ -29,6 +30,7 @@ void print_usage(const char* exe) {
               << "  --state N               1-based orbital index to calculate [default: 5]\n"
               << "  --all-states            Calculate all diagonal states\n"
               << "  --eta VALUE             Infinitesimal broadening [default: 0.0]\n"
+              << "  --output-dir PATH       Directory containing E_c_before_Pade.txt and E_c.out \n"
               << "  --help                  Show this message\n";
 }
 
@@ -54,6 +56,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.selected_state_1based.reset();
         } else if (arg == "--eta") {
             cli.eta = std::stod(require_value(arg));
+		} else if (arg == "--output-dir") {
+			cli.output_dir = require_value(arg);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             std::exit(EXIT_SUCCESS);
@@ -61,6 +65,7 @@ Cli parse_cli(int argc, char** argv) {
             throw std::runtime_error("Unknown argument: " + arg);
         }
     }
+    std::filesystem::create_directories(cli.output_dir);
     return cli;
 }
 
@@ -113,12 +118,12 @@ int main(int argc, char** argv) {
         const gw::GwResult result = gw::run_g0w0(input, settings);
 
         const std::size_t output_state = settings.selected_state_0based.value_or(0);
-        gw::output_self_energy_before_pade("E_c_before_Pade.txt", result.sigma_c_im_points, output_state);
+        gw::output_self_energy_before_pade(cli.output_dir+"/E_c_before_Pade.txt", result.sigma_c_im_points, output_state);
         std::vector<gw::Complex> state_sigma(result.omegas.size());
         for (std::size_t f = 0; f < result.omegas.size(); ++f) {
             state_sigma[f] = result.sigma_c_im_points(output_state, f);
         }
-        gw::output_self_energy_after_pade("E_c.out", state_sigma, result.omegas, settings.num_pade_params, 19836, input.fermi_energy);
+        gw::output_self_energy_after_pade(cli.output_dir+"/E_c.out", state_sigma, result.omegas, settings.num_pade_params, 19836, input.fermi_energy);
 
         std::cout << "\n--- G0W0 Calculation Summary ---\n";
         if (settings.selected_state_0based.has_value()) {

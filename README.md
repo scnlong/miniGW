@@ -45,4 +45,18 @@ cmake --build build -j 4
 ./build/gw20 --input-dir /path/to/pyscf_output --freq-points 200 --pade-params 16 --state 5
 ```
 
-Use `--all-states` to compute all diagonal states. The default follows the Julia prototype and computes state 5.
+Use `--all-states` to compute all diagonal states. 
+
+## Regression Tests
+
+```bash
+ctest --test-dir build/ -N 
+```
+
+List all the cases to be tested.
+
+```bash
+ctest --test-dir build -j 4 --output-on-failure
+```
+
+Run all the regression test cases.
