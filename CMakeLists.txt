@@ -10,6 +10,7 @@ add_library(gwcore
     src/frequency_grids.cpp
     src/pade.cpp
     src/npy.cpp
+    src/linalg.cpp
     src/gw.cpp
     src/io.cpp
     src/profiling.cpp
@@ -25,6 +26,65 @@ option(GW_ENABLE_NATIVE "Enable -march=native when supported" OFF)
 if(GW_ENABLE_NATIVE)
     target_compile_options(gwcore PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-march=native>)
 endif()
+
+
+# Optional backend switches. Each backend gets its own CMake target.
+# This is intentionally not a single mutually-exclusive vendor target: a build may
+# provide several backend implementations at once, and the program can select one
+# through gw::GwSettings::linalg_backend or a future CLI/runtime factory.
+option(GW_ENABLE_OPENBLAS "Build/link an OpenBLAS/LAPACK dense CPU backend" OFF)
+option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK distributed dense backend" OFF)
+option(GW_ENABLE_COSMA "Build/link a COSMA distributed matrix-multiply backend" OFF)
+option(GW_ENABLE_CUDA "Build/link CUDA/cuBLAS/cuSolver backend code" OFF)
+
+add_library(gw_linalg_backends INTERFACE)
+
+# Reference backend is always compiled into gwcore through src/linalg.cpp.
+# Optional vendor backends should be added below as separate targets, for example:
+#   add_library(gw_linalg_openblas src/linalg_openblas.cpp)
+#   target_link_libraries(gw_linalg_openblas PUBLIC gwcore BLAS::BLAS LAPACK::LAPACK)
+#   target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_openblas)
+# The current project only ships the reference backend implementation, so the
+# optional targets below are dependency/link placeholders until the corresponding
+# backend source files are added.
+
+if(GW_ENABLE_OPENBLAS)
+    find_package(BLAS REQUIRED)
+    find_package(LAPACK REQUIRED)
+    add_library(gw_linalg_openblas INTERFACE)
+    target_link_libraries(gw_linalg_openblas INTERFACE BLAS::BLAS LAPACK::LAPACK)
+    target_compile_definitions(gw_linalg_openblas INTERFACE GW_HAS_OPENBLAS_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_openblas)
+endif()
+
+if(GW_ENABLE_SCALAPACK)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+    find_package(SCALAPACK REQUIRED)
+    add_library(gw_linalg_scalapack INTERFACE)
+    target_link_libraries(gw_linalg_scalapack INTERFACE MPI::MPI_CXX SCALAPACK::SCALAPACK)
+    target_compile_definitions(gw_linalg_scalapack INTERFACE GW_HAS_SCALAPACK_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
+endif()
+
+if(GW_ENABLE_COSMA)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+    find_package(COSMA REQUIRED)
+    add_library(gw_linalg_cosma INTERFACE)
+    target_link_libraries(gw_linalg_cosma INTERFACE MPI::MPI_CXX COSMA::cosma)
+    target_compile_definitions(gw_linalg_cosma INTERFACE GW_HAS_COSMA_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cosma)
+endif()
+
+if(GW_ENABLE_CUDA)
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    add_library(gw_linalg_cuda INTERFACE)
+    target_link_libraries(gw_linalg_cuda INTERFACE CUDA::cublas CUDA::cusolver)
+    target_compile_definitions(gw_linalg_cuda INTERFACE GW_HAS_CUDA_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cuda)
+endif()
+
+target_link_libraries(gwcore PUBLIC gw_linalg_backends)
 
 add_executable(gw src/main.cpp)
 target_link_libraries(gw PRIVATE gwcore)

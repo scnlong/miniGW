@@ -1,5 +1,6 @@
 #include "gw/gw.hpp"
 #include "gw/frequency_grids.hpp"
+#include "gw/linalg.hpp"
 #include "gw/pade.hpp"
 
 #include <algorithm>
@@ -17,14 +18,6 @@ double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
     return std::chrono::duration<double>(end - start).count();
 }
 
-MatrixComplex identity_complex(std::size_t n) {
-    MatrixComplex out(n, n, Complex{0.0, 0.0});
-    for (std::size_t i = 0; i < n; ++i) {
-        out(i, i) = Complex{1.0, 0.0};
-    }
-    return out;
-}
-
 MatrixComplex to_complex(const MatrixReal& in) {
     MatrixComplex out(in.rows(), in.cols(), Complex{0.0, 0.0});
     for (std::size_t i = 0; i < in.rows(); ++i) {
@@ -33,55 +26,6 @@ MatrixComplex to_complex(const MatrixReal& in) {
         }
     }
     return out;
-}
-
-MatrixComplex inverse(MatrixComplex a) {
-    const std::size_t n = a.rows();
-    if (a.rows() != a.cols()) {
-        throw std::runtime_error("inverse: matrix must be square");
-    }
-    MatrixComplex inv = identity_complex(n);
-
-    for (std::size_t col = 0; col < n; ++col) {
-        std::size_t pivot = col;
-        double pivot_abs = std::abs(a(col, col));
-        for (std::size_t row = col + 1; row < n; ++row) {
-            const double candidate = std::abs(a(row, col));
-            if (candidate > pivot_abs) {
-                pivot_abs = candidate;
-                pivot = row;
-            }
-        }
-        if (pivot_abs < 1e-14) {
-            throw std::runtime_error("inverse: near-singular matrix");
-        }
-        if (pivot != col) {
-            for (std::size_t j = 0; j < n; ++j) {
-                std::swap(a(col, j), a(pivot, j));
-                std::swap(inv(col, j), inv(pivot, j));
-            }
-        }
-
-        const Complex diag = a(col, col);
-        for (std::size_t j = 0; j < n; ++j) {
-            a(col, j) /= diag;
-            inv(col, j) /= diag;
-        }
-        for (std::size_t row = 0; row < n; ++row) {
-            if (row == col) {
-                continue;
-            }
-            const Complex factor = a(row, col);
-            if (std::abs(factor) == 0.0) {
-                continue;
-            }
-            for (std::size_t j = 0; j < n; ++j) {
-                a(row, j) -= factor * a(col, j);
-                inv(row, j) -= factor * inv(col, j);
-            }
-        }
-    }
-    return inv;
 }
 
 std::vector<std::size_t> selected_states(std::size_t nmo, const std::optional<std::size_t>& selected) {
@@ -146,7 +90,7 @@ MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const Part
     return v_ph;
 }
 
-MatrixComplex calculate_w_0_c_matrix(Complex /*omega*/, const MatrixReal& v_ph, const std::vector<Complex>& pi0_diag) {
+MatrixComplex calculate_w_0_c_matrix(Complex /*omega*/, const MatrixReal& v_ph, const std::vector<Complex>& pi0_diag, const linalg::Backend& backend) {
     const std::size_t n = v_ph.rows();
     if (v_ph.rows() != v_ph.cols() || pi0_diag.size() != n) {
         throw std::runtime_error("calculate_w_0_c_matrix: inconsistent dimensions");
@@ -160,24 +104,16 @@ MatrixComplex calculate_w_0_c_matrix(Complex /*omega*/, const MatrixReal& v_ph, 
         epsilon(i, i) += Complex{1.0, 0.0};
     }
 
-    MatrixComplex inv_eps = inverse(epsilon);
+    MatrixComplex inv_eps = backend.inverse(epsilon);
     for (std::size_t i = 0; i < n; ++i) {
         inv_eps(i, i) -= Complex{1.0, 0.0};
     }
-    const MatrixComplex inv_v = inverse(to_complex(v_ph));
+    const MatrixComplex inv_v = backend.inverse(to_complex(v_ph));
 
-    // Julia prototype: @tensor W[i,k] := tmp1[j,i] * tmp2[j,k]
-    MatrixComplex w(n, n, Complex{0.0, 0.0});
-    for (std::size_t i = 0; i < n; ++i) {
-        for (std::size_t k = 0; k < n; ++k) {
-            Complex sum{0.0, 0.0};
-            for (std::size_t j = 0; j < n; ++j) {
-                sum += inv_eps(j, i) * inv_v(j, k);
-            }
-            w(i, k) = sum;
-        }
-    }
-    return w;
+    // Julia prototype: @tensor W[i,k] := tmp1[j,i] * tmp2[j,k].
+    // This is W = inv_eps^T * inv_v; routed through the backend so it can
+    // later map to BLAS/LAPACK, ScaLAPACK/COSMA, cuBLAS/cuSolver, etc.
+    return backend.gemm(inv_eps, inv_v, linalg::MatrixTranspose::Transpose, linalg::MatrixTranspose::NoTranspose);
 }
 
 Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis) {
@@ -200,6 +136,8 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     validate_input_shapes(orbitals, integrals);
 
     const ParticleHoleBasis ph_basis(orbitals);
+    const linalg::Backend& linalg_backend = settings.linalg_backend ? *settings.linalg_backend : linalg::reference_backend();
+    std::cout << "Linear algebra backend: " << linalg_backend.name() << '\n';
 
     auto [omegas, weights] = generate_transformed_legendre_grid(settings.num_freq_points_total);
 	std::cout << "Total number of Padé  parameters: " << settings.num_pade_params << '\n';
@@ -242,7 +180,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             result.timings.build_pi0_seconds += elapsed_seconds(phase_start, Clock::now());
 
             phase_start = Clock::now();
-            const MatrixComplex w_c_ph = calculate_w_0_c_matrix(omega_prime_im, v_ph, pi0_diag);
+            const MatrixComplex w_c_ph = calculate_w_0_c_matrix(omega_prime_im, v_ph, pi0_diag, linalg_backend);
             result.timings.invert_epsilon_seconds += elapsed_seconds(phase_start, Clock::now());
 
             phase_start = Clock::now();
@@ -253,16 +191,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
                         pk_vec[ph] = pq_ph(p_idx, k_idx, ph);
                     }
 
-                    std::vector<Complex> tmp(ph_basis.size(), Complex{0.0, 0.0});
-                    for (std::size_t i = 0; i < ph_basis.size(); ++i) {
-                        for (std::size_t j = 0; j < ph_basis.size(); ++j) {
-                            tmp[i] += w_c_ph(i, j) * pk_vec[j];
-                        }
-                    }
-                    Complex w_minus_v{0.0, 0.0};
-                    for (std::size_t i = 0; i < ph_basis.size(); ++i) {
-                        w_minus_v += pk_vec[i] * tmp[i];
-                    }
+                    const Complex w_minus_v = linalg_backend.quadratic_form(pk_vec, w_c_ph);
 
                     const Complex g0_denominator = omega_n_im + orbitals.fermi_energy() - orbitals.energy(k_idx);
                     const Complex g0_term = g0_denominator / (g0_denominator * g0_denominator - omega_prime_im * omega_prime_im);

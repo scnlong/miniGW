@@ -18,6 +18,7 @@ CMakeCache.txt
 .vscode/
 *.swp
 .DS_Store
+.codex
 tags
 
 # logs / temporary files

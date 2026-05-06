@@ -1,0 +1,56 @@
+#pragma once
+
+#include "gw/types.hpp"
+
+#include <memory>
+#include <string_view>
+#include <vector>
+
+namespace gw::linalg {
+
+enum class MatrixTranspose {
+    NoTranspose,
+    Transpose,
+    ConjugateTranspose
+};
+
+class Backend {
+public:
+    virtual ~Backend() = default;
+
+    [[nodiscard]] virtual std::string_view name() const noexcept = 0;
+
+    [[nodiscard]] virtual MatrixComplex inverse(MatrixComplex a) const = 0;
+
+    [[nodiscard]] virtual MatrixComplex gemm(const MatrixComplex& a,
+                                             const MatrixComplex& b,
+                                             MatrixTranspose trans_a = MatrixTranspose::NoTranspose,
+                                             MatrixTranspose trans_b = MatrixTranspose::NoTranspose) const = 0;
+
+    [[nodiscard]] virtual std::vector<Complex> gemv(const MatrixComplex& a,
+                                                    const std::vector<double>& x,
+                                                    MatrixTranspose trans_a = MatrixTranspose::NoTranspose) const = 0;
+
+    [[nodiscard]] virtual Complex quadratic_form(const std::vector<double>& x,
+                                                 const MatrixComplex& a) const = 0;
+};
+
+class ReferenceBackend final : public Backend {
+public:
+    [[nodiscard]] std::string_view name() const noexcept override;
+    [[nodiscard]] MatrixComplex inverse(MatrixComplex a) const override;
+    [[nodiscard]] MatrixComplex gemm(const MatrixComplex& a,
+                                     const MatrixComplex& b,
+                                     MatrixTranspose trans_a = MatrixTranspose::NoTranspose,
+                                     MatrixTranspose trans_b = MatrixTranspose::NoTranspose) const override;
+    [[nodiscard]] std::vector<Complex> gemv(const MatrixComplex& a,
+                                            const std::vector<double>& x,
+                                            MatrixTranspose trans_a = MatrixTranspose::NoTranspose) const override;
+    [[nodiscard]] Complex quadratic_form(const std::vector<double>& x,
+                                         const MatrixComplex& a) const override;
+};
+
+[[nodiscard]] const Backend& reference_backend();
+[[nodiscard]] std::shared_ptr<const Backend> make_reference_backend();
+
+} // namespace gw::linalg

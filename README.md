@@ -2,7 +2,7 @@
 
 A C++20 G0W0 prototype.
 
-This project intentionally starts with a serial CPU implementation and a small self-contained `.npy` reader. MPI, CUDA, and GoogleTest can be added later behind CMake options.
+This project intentionally starts with a serial CPU implementation and a small self-contained `.npy` reader (Read inputs from pyscf DFT results). The GW equations now call dense linear algebra through `gw::linalg::Backend`, so OpenBLAS/LAPACK, ScaLAPACK, COSMA, cuBLAS/cuSolver, or HIP backends can be added behind this boundary without rewriting the GW driver.
 
 ## Scope
 
@@ -16,11 +16,19 @@ Implemented modules:
 - correlation self-energy on the imaginary axis;
 - continued-fraction Padé approximation;
 - iterative diagonal quasiparticle-energy update;
-- minimal NumPy `.npy` reader for little-endian `float64` arrays.
+- minimal NumPy `.npy` reader for little-endian `float64` arrays;
+- explicit dense linear-algebra backend boundary with a serial reference backend.
+
+## Build
+
+```bash
+cmake -S . -B build -C cmake_install.cmake
+cmake --build build -j 4
+```
 
 ## Expected input files
 
-Run from a directory containing:
+Run a pyscf DFT calculation (`pyscf_g0w0_prep.py` script from `pyscf_prep` directory)and its outputs contain:
 
 ```text
 eri_mo.npy
@@ -32,17 +40,10 @@ fermi_energy.txt
 
 The `.npy` reader currently supports C-order, little-endian `float64` arrays only.
 
-## Build
-
-```bash
-cmake -S . -B build -C cmake_install.cmake
-cmake --build build -j 4
-```
-
 ## Run
 
 ```bash
-./build/gw20 --input-dir /path/to/pyscf_output --freq-points 200 --pade-params 16 --state 5
+./build/gw --input-dir /path/to/pyscf_output --freq-points 200 --pade-params 16 --state 5
 ```
 
 Use `--all-states` to compute all diagonal states. 
@@ -60,3 +61,19 @@ ctest --test-dir build -j 4 --output-on-failure
 ```
 
 Run all the regression test cases.
+
+
+## Linear algebra backends
+
+The default backend is `reference-serial`; it is intentionally simple and is meant for correctness and portability, not production performance. The current replacement boundary is documented in `docs/linalg_backend_interface.md`.
+
+CMake exposes preparation switches for vendor libraries:
+
+```bash
+-DGW_ENABLE_OPENBLAS=ON
+-DGW_ENABLE_SCALAPACK=ON
+-DGW_ENABLE_COSMA=ON
+-DGW_ENABLE_CUDA=ON
+```
+
+These switches only prepare/link the relevant vendor targets when available. The actual optimized backend classes should be added as separate implementations of `gw::linalg::Backend`.
