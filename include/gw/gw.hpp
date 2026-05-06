@@ -1,5 +1,8 @@
 #pragma once
 
+#include "gw/integrals.hpp"
+#include "gw/orbital_space.hpp"
+#include "gw/particle_hole.hpp"
 #include "gw/types.hpp"
 
 #include <optional>
@@ -40,11 +43,11 @@ struct GwResult {
     GwTimings timings;
 };
 
-MatrixReal calculate_exchange(const Tensor4Real& eri_mo, std::size_t nocc);
-std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const std::vector<double>& mo_energy, std::size_t nocc, std::size_t nvirt, double eta);
-MatrixReal calculate_v_ph_matrix(const Tensor4Real& eri_mo, std::size_t nocc, std::size_t nvirt);
+MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularIntegrals& integrals);
+std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasis& ph_basis, double eta);
+MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis);
 MatrixComplex calculate_w_0_c_matrix(Complex omega, const MatrixReal& v_ph, const std::vector<Complex>& pi0_diag);
-Tensor3Real calculate_pq_ph_matrix(const Tensor4Real& eri_mo, std::size_t nocc, std::size_t nvirt);
+Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis);
 GwResult run_g0w0(const GwInput& input, const GwSettings& settings);
 
 } // namespace gw
