@@ -227,6 +227,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 
     std::cout << "Starting Sigma_c(iw) calculation...\n";
     start = Clock::now();
+    auto frequency_chunk_start = start;
     for (std::size_t f_n = 0; f_n < settings.num_freq_points_total; ++f_n) {
         const Complex omega_n_im = omega_im[f_n];
         std::vector<Complex> current_sigma(nmo, Complex{0.0, 0.0});
@@ -271,14 +272,16 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             result.sigma_c_im_points(p, f_n) = current_sigma[p] / kPi;
         }
         if ((f_n + 1) % 10 == 0 || f_n + 1 == settings.num_freq_points_total) {
-            std::cout << "  completed frequency " << (f_n + 1) << " / " << settings.num_freq_points_total << '\n';
+            const auto frequency_chunk_end = Clock::now();
+            std::cout << "  completed frequency " << (f_n + 1) << " / " << settings.num_freq_points_total
+                      << " in " << elapsed_seconds(frequency_chunk_start, frequency_chunk_end) << " s\n";
+            frequency_chunk_start = frequency_chunk_end;
         }
     }
     std::cout << "Sigma_c(iw) calculation complete.\n";
-    result.timings.sigma_c_seconds += elapsed_seconds(start, Clock::now())
-                                    - result.timings.build_pi0_seconds
-                                    - result.timings.invert_epsilon_seconds
-                                    - result.timings.sigma_c_seconds;
+    result.timings.sigma_c_seconds = elapsed_seconds(start, Clock::now())
+                                   - result.timings.build_pi0_seconds
+                                   - result.timings.invert_epsilon_seconds;
 
     start = Clock::now();
     result.qp_energy.assign(nmo, 0.0);
