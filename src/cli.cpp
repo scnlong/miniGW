@@ -18,6 +18,8 @@ void print_usage(const char* exe) {
               << "  --all-states            Calculate all diagonal states\n"
               << "  --eta VALUE             Infinitesimal broadening [default: 0.0]\n"
               << "  --linalg-backend NAME   Linear algebra backend: reference or blas-lapack [default: reference]\n"
+              << "  --print-memory-footprint\n"
+              << "                          Print an algorithmic host-side memory estimate before running GW\n"
               << "  --output-dir PATH       Directory containing E_c_before_Pade.out, E_c.out, and gw.out \n"
               << "  --help                  Show this message\n";
 }
@@ -48,6 +50,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.eta = std::stod(require_value(arg));
         } else if (arg == "--linalg-backend") {
             cli.linalg_backend = require_value(arg);
+        } else if (arg == "--print-memory-footprint") {
+            cli.print_memory_footprint = true;
         } else if (arg == "--output-dir") {
             cli.output_dir = require_value(arg);
         } else if (arg == "--help" || arg == "-h") {

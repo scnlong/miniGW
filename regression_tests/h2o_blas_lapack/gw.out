@@ -8,41 +8,79 @@ Loading data from: .
   - Number of MOs: 18
   - Number of particle-hole states: 65
   - ERI MO shape: (18, 18, 18, 18)
+
+Estimated host-side memory footprint
+  Dimensions:
+    nmo:                 18
+    nocc:                5
+    nvirt:               13
+    n_ph = nocc*nvirt:   65
+    frequency points:    200
+  Input arrays resident in GwInput:
+    ERI tensor:           820.1 KB
+    Vxc MO matrix:        2.5 KB
+    MO energies:          144.0 B
+    Input subtotal:       822.8 KB
+  Current runtime resident copies:
+    ERI copy in integrals:820.1 KB
+    Vxc copy in integrals:2.5 KB
+    Copy subtotal:        822.7 KB
+  Main GW resident arrays:
+    Sigma_x matrix:       2.5 KB
+    V_ph matrix:          33.0 KB
+    pq_ph tensor:         164.5 KB
+    sigma_c(iw) grid:     56.2 KB
+    QP energy vector:     144.0 B
+    frequency grids:      6.2 KB
+  Per-frequency peak workspace:
+    pi0 diagonal:         1.0 KB
+    pk vector:            520.0 B
+    current sigma vector: 288.0 B
+    quadratic workspace:  1.0 KB
+    one W_c matrix:       66.0 KB
+    W_c construction peak:396.1 KB
+  Totals:
+    Persistent subtotal:  1.9 MB
+    Workspace subtotal:   398.9 KB
+    Estimated peak:       2.3 MB
+  Note: this is an algorithmic host-side estimate. It excludes allocator overhead,
+        OpenBLAS/LAPACK/cuSolver internal workspaces, device memory, and OS/runtime overhead.
+
 Linear algebra backend: blas-lapack
 Total number of Padé  parameters: 16
 Total number of transformed Gauss-Legendre frequency points: 200
 Shape of V_ph matrix: (65, 65)
 Shape of pq_ph tensor: (18, 18, 65)
 Starting Sigma_c(iw) calculation...
-  completed frequency 10 / 200 in 2.35955 s
-  completed frequency 20 / 200 in 1.73687 s
-  completed frequency 30 / 200 in 2.01973 s
-  completed frequency 40 / 200 in 1.92254 s
-  completed frequency 50 / 200 in 1.92274 s
-  completed frequency 60 / 200 in 2.94804 s
-  completed frequency 70 / 200 in 2.35898 s
-  completed frequency 80 / 200 in 2.07292 s
-  completed frequency 90 / 200 in 2.26185 s
-  completed frequency 100 / 200 in 2.42131 s
-  completed frequency 110 / 200 in 2.13488 s
-  completed frequency 120 / 200 in 2.50174 s
-  completed frequency 130 / 200 in 2.15454 s
-  completed frequency 140 / 200 in 2.11357 s
-  completed frequency 150 / 200 in 2.35933 s
-  completed frequency 160 / 200 in 1.86123 s
-  completed frequency 170 / 200 in 1.78463 s
-  completed frequency 180 / 200 in 2.01207 s
-  completed frequency 190 / 200 in 1.83915 s
-  completed frequency 200 / 200 in 1.81994 s
+  completed frequency 10 / 200 in 1.63198 s
+  completed frequency 20 / 200 in 1.69862 s
+  completed frequency 30 / 200 in 1.57975 s
+  completed frequency 40 / 200 in 1.69994 s
+  completed frequency 50 / 200 in 1.71975 s
+  completed frequency 60 / 200 in 1.70363 s
+  completed frequency 70 / 200 in 1.7059 s
+  completed frequency 80 / 200 in 1.72652 s
+  completed frequency 90 / 200 in 1.73888 s
+  completed frequency 100 / 200 in 1.73016 s
+  completed frequency 110 / 200 in 1.74199 s
+  completed frequency 120 / 200 in 1.74671 s
+  completed frequency 130 / 200 in 1.75247 s
+  completed frequency 140 / 200 in 1.76917 s
+  completed frequency 150 / 200 in 1.70515 s
+  completed frequency 160 / 200 in 1.81005 s
+  completed frequency 170 / 200 in 1.75741 s
+  completed frequency 180 / 200 in 1.73334 s
+  completed frequency 190 / 200 in 1.82047 s
+  completed frequency 200 / 200 in 1.80744 s
 Sigma_c(iw) calculation complete.
 
 --- Profiling Baseline ---
 read input:           0.00 s
 build mapping:        0.00 s
 exchange:             0.00 s
-build Pi0:            0.09 s
-invert epsilon:      33.88 s
-sigma_c:              8.64 s
+build Pi0:            0.08 s
+invert epsilon:      29.24 s
+sigma_c:              5.26 s
 pade:                 0.07 s
 
 --- G0W0 Calculation Summary ---

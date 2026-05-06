@@ -166,7 +166,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     result.sigma_c_im_points = MatrixComplex(orbitals.nmo(), settings.num_freq_points_total, Complex{0.0, 0.0});
     const auto states = selected_states(orbitals.nmo(), settings.selected_state_0based);
 
-    std::cout << "Starting Sigma_c(iw) calculation...\n";
+    std::cout << "\n--- Starting Sigma_c(iw) calculation... ---\n";
     start = Clock::now();
     auto frequency_chunk_start = start;
     for (std::size_t f_n = 0; f_n < settings.num_freq_points_total; ++f_n) {

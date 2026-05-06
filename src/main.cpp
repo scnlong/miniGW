@@ -39,6 +39,9 @@ int main(int argc, char** argv) {
         const double read_input_seconds = gw::elapsed_seconds(read_input_start, gw::ProfilingClock::now());
 
         const std::size_t nmo = input.mo_energy.size();
+        if (input.nocc > nmo) {
+            throw std::runtime_error("Input error: nocc exceeds number of molecular orbitals");
+        }
         const std::size_t nvirt = nmo - input.nocc;
         const std::size_t n_ph = input.nocc * nvirt;
 
@@ -76,7 +79,10 @@ int main(int argc, char** argv) {
             settings.selected_state_0based.reset();
         }
 
-        gw::print_memory_footprint_report(gw::estimate_memory_footprint(input, settings.num_freq_points_total));
+        if (cli.print_memory_footprint) {
+            const gw::MemoryFootprint footprint = gw::estimate_memory_footprint(input, settings.num_freq_points_total);
+            gw::print_memory_footprint_report(footprint);
+        }
 
         const gw::GwResult result = gw::run_g0w0(input, settings);
 
