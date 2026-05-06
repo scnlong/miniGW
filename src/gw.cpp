@@ -50,6 +50,7 @@ void validate_input_shapes(const OrbitalSpace& orbitals, const MolecularIntegral
 
 } // namespace
 
+// exchange
 MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularIntegrals& integrals) {
     validate_input_shapes(orbitals, integrals);
 
@@ -64,6 +65,7 @@ MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularInteg
     return sigma_x;
 }
 
+// Polarisability
 std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasis& ph_basis, double eta) {
     std::vector<Complex> diag(ph_basis.size());
     const Complex ieta{0.0, eta};
@@ -76,6 +78,7 @@ std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasi
     return diag;
 }
 
+// Coulomb on ph-ph space
 MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis) {
     MatrixReal v_ph(ph_basis.size(), ph_basis.size(), 0.0);
     for (std::size_t ph_ia = 0; ph_ia < ph_basis.size(); ++ph_ia) {
@@ -90,6 +93,7 @@ MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const Part
     return v_ph;
 }
 
+// W term
 MatrixComplex calculate_w_0_c_matrix(Complex /*omega*/, const MatrixReal& v_ph, const std::vector<Complex>& pi0_diag, const linalg::Backend& backend) {
     const std::size_t n = v_ph.rows();
     if (v_ph.rows() != v_ph.cols() || pi0_diag.size() != n) {
@@ -116,6 +120,7 @@ MatrixComplex calculate_w_0_c_matrix(Complex /*omega*/, const MatrixReal& v_ph, 
     return backend.gemm(inv_eps, inv_v, linalg::MatrixTranspose::Transpose, linalg::MatrixTranspose::NoTranspose);
 }
 
+// Coulomb on p-p-ph space
 Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis) {
     const std::size_t nmo = integrals.nmo();
     Tensor3Real out(nmo, nmo, ph_basis.size(), 0.0);
@@ -130,7 +135,9 @@ Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const Pa
     return out;
 }
 
+// g0w0 main function
 GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
+	// set up parameters
     OrbitalSpace orbitals(input.mo_energy, input.nocc, input.fermi_energy);
     MolecularIntegrals integrals(input.eri_mo, input.vxc_mo);
     validate_input_shapes(orbitals, integrals);
@@ -147,16 +154,21 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     result.omegas = omegas;
     result.weights = weights;
 
+	// calculate exchange
     auto start = Clock::now();
     result.sigma_x = calculate_exchange(orbitals, integrals);
     result.timings.exchange_seconds = elapsed_seconds(start, Clock::now());
 
+	// calculate Coulomb on ph-ph space
     start = Clock::now();
     const MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
     std::cout << "Shape of V_ph matrix: (" << v_ph.rows() << ", " << v_ph.cols() << ")\n";
+
+	// calculate Coulomb on p-p-ph space
     const Tensor3Real pq_ph = calculate_pq_ph_matrix(integrals, ph_basis);
     std::cout << "Shape of pq_ph tensor: (" << pq_ph.dim0() << ", " << pq_ph.dim1() << ", " << pq_ph.dim2() << ")\n";
 
+	// set up freq points
     std::vector<Complex> omega_im(settings.num_freq_points_total);
     for (std::size_t i = 0; i < settings.num_freq_points_total; ++i) {
         omega_im[i] = Complex{0.0, omegas[i]};
@@ -166,6 +178,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     result.sigma_c_im_points = MatrixComplex(orbitals.nmo(), settings.num_freq_points_total, Complex{0.0, 0.0});
     const auto states = selected_states(orbitals.nmo(), settings.selected_state_0based);
 
+	// calculate Sigma_c
     std::cout << "\n--- Starting Sigma_c(iw) calculation... ---\n";
     start = Clock::now();
     auto frequency_chunk_start = start;
@@ -176,13 +189,17 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         for (std::size_t f_prime = 0; f_prime < settings.num_freq_points_total; ++f_prime) {
             const Complex omega_prime_im = omega_im[f_prime];
             auto phase_start = Clock::now();
+
+			// calculate polarisability
             const auto pi0_diag = calculate_pi0_ph_diag(omega_prime_im, ph_basis, settings.eta);
             result.timings.build_pi0_seconds += elapsed_seconds(phase_start, Clock::now());
 
             phase_start = Clock::now();
+			// calculate W term
             const MatrixComplex w_c_ph = calculate_w_0_c_matrix(omega_prime_im, v_ph, pi0_diag, linalg_backend);
             result.timings.invert_epsilon_seconds += elapsed_seconds(phase_start, Clock::now());
 
+			// calculate Sigma_c
             phase_start = Clock::now();
             for (const auto p_idx : states) {
                 for (std::size_t k_idx = 0; k_idx < orbitals.nmo(); ++k_idx) {
@@ -203,6 +220,8 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         for (std::size_t p = 0; p < orbitals.nmo(); ++p) {
             result.sigma_c_im_points(p, f_n) = current_sigma[p] / kPi;
         }
+
+		// print freq calculation progress
         if ((f_n + 1) % 10 == 0 || f_n + 1 == settings.num_freq_points_total) {
             const auto frequency_chunk_end = Clock::now();
             std::cout << "  completed frequency " << (f_n + 1) << " / " << settings.num_freq_points_total
@@ -219,13 +238,19 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     result.qp_energy.assign(orbitals.nmo(), 0.0);
     constexpr std::size_t max_iterations = 200;
     constexpr double tolerance = 1e-6;
+
+	// analytical continuation
     for (std::size_t state = 0; state < orbitals.nmo(); ++state) {
         double current_qp = orbitals.energy(state);
         std::vector<Complex> orbital_sigma(settings.num_freq_points_total);
         for (std::size_t f = 0; f < settings.num_freq_points_total; ++f) {
             orbital_sigma[f] = result.sigma_c_im_points(state, f);
         }
+
+		// calculate Pade coefficients
         const auto [coeffs, sampled] = get_pade_coefficients_continued_fraction(omega_im, orbital_sigma, settings.num_pade_params);
+
+		// find qp energy
         for (std::size_t iter = 0; iter < max_iterations; ++iter) {
             const double target_omega_qp = current_qp - orbitals.fermi_energy();
             const Complex sigma_c_at_qp = evaluate_pade_continued_fraction(coeffs, target_omega_qp, sampled);
