@@ -14,6 +14,7 @@ struct Cli {
     std::optional<std::size_t> selected_state_1based{5};
     double eta{0.0};
     std::string linalg_backend{"blas-lapack"};
+    std::string frequency_parallel{"auto"};
     bool print_memory_footprint{true};
 };
 

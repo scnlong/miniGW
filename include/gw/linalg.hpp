@@ -14,11 +14,19 @@ enum class MatrixTranspose {
     ConjugateTranspose
 };
 
+struct BackendCapabilities {
+    bool thread_safe{true};
+    bool uses_internal_threads{false};
+    bool distributed_mpi{false};
+    bool uses_device_memory{false};
+};
+
 class Backend {
 public:
     virtual ~Backend() = default;
 
     [[nodiscard]] virtual std::string_view name() const noexcept = 0;
+    [[nodiscard]] virtual BackendCapabilities capabilities() const noexcept { return {}; }
 
     [[nodiscard]] virtual MatrixComplex inverse(MatrixComplex a) const = 0;
 

@@ -15,13 +15,17 @@ void output_profiling_baseline(double read_input_seconds, const GwTimings& timin
 
     std::cout << "\n--- Profiling Baseline ---\n";
     std::cout << std::fixed << std::setprecision(2);
-    std::cout << std::left << std::setw(18) << "read input:" << std::right << std::setw(8) << read_input_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "build mapping:" << std::right << std::setw(8) << timings.build_mapping_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "exchange:" << std::right << std::setw(8) << timings.exchange_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "build Pi0:" << std::right << std::setw(8) << timings.build_pi0_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "invert epsilon:" << std::right << std::setw(8) << timings.invert_epsilon_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "sigma_c:" << std::right << std::setw(8) << timings.sigma_c_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "pade:" << std::right << std::setw(8) << timings.pade_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "read input:" << std::right << std::setw(8) << read_input_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "total GW wall:" << std::right << std::setw(8) << timings.total_wall_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "build mapping:" << std::right << std::setw(8) << timings.build_mapping_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "exchange:" << std::right << std::setw(8) << timings.exchange_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "inv(V_ph):" << std::right << std::setw(8) << timings.build_inv_v_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "build Pi0 accum:" << std::right << std::setw(8) << timings.build_pi0_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "build W_c accum:" << std::right << std::setw(8) << timings.invert_epsilon_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "sigma_c accum:" << std::right << std::setw(8) << timings.sigma_c_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "sigma_c wall:" << std::right << std::setw(8) << timings.sigma_c_wall_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "MPI reduce:" << std::right << std::setw(8) << timings.mpi_reduce_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "pade/output pade:" << std::right << std::setw(8) << timings.pade_seconds << " s\n";
 
     std::cout.flags(old_flags);
     std::cout.precision(old_precision);

@@ -11,17 +11,17 @@ namespace {
 void print_usage(const char* exe) {
     std::cerr << "Usage: " << exe << " [options]\n"
               << "Options:\n"
-              << "  --input-dir PATH        Directory containing eri_mo.npy, mo_energy.npy, vxc_mo.npy, nocc.txt, fermi_energy.txt\n"
-              << "  --freq-points N         Number of imaginary-frequency points [default: 200]\n"
-              << "  --pade-params N         Number of Pade parameters [default: 16]\n"
-              << "  --state N               1-based orbital index to calculate [default: 5]\n"
-              << "  --all-states            Calculate all diagonal states\n"
-              << "  --eta VALUE             Infinitesimal broadening [default: 0.0]\n"
-              << "  --linalg-backend NAME   Linear algebra backend: reference or blas-lapack [default: reference]\n"
-              << "  --print-memory-footprint\n"
-              << "                          Print an algorithmic host-side memory estimate before running GW\n"
-              << "  --output-dir PATH       Directory containing E_c_before_Pade.out, E_c.out, and gw.out \n"
-              << "  --help                  Show this message\n";
+              << "  --input-dir PATH             Directory containing eri_mo.npy, mo_energy.npy, vxc_mo.npy, nocc.txt, fermi_energy.txt\n"
+              << "  --freq-points N              Number of imaginary-frequency points [default: 200]\n"
+              << "  --pade-params N              Number of Pade parameters [default: 16]\n"
+              << "  --state N                    1-based orbital index to calculate [default: 5]\n"
+              << "  --all-states                 Calculate all diagonal states\n"
+              << "  --eta VALUE                  Infinitesimal broadening [default: 0.0]\n"
+              << "  --linalg-backend NAME        reference, blas-lapack, scalapack, cosma, or cublas [default: reference]\n"
+              << "  --frequency-parallel MODE    auto, serial, mpi, or openmp [default: auto]\n"
+              << "  --print-memory-footprint     Print an algorithmic memory estimate before running GW\n"
+              << "  --output-dir PATH            Directory containing E_c_before_Pade.out, E_c.out, and gw.out\n"
+              << "  --help                       Show this message\n";
 }
 
 } // namespace
@@ -50,6 +50,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.eta = std::stod(require_value(arg));
         } else if (arg == "--linalg-backend") {
             cli.linalg_backend = require_value(arg);
+        } else if (arg == "--frequency-parallel") {
+            cli.frequency_parallel = require_value(arg);
         } else if (arg == "--print-memory-footprint") {
             cli.print_memory_footprint = true;
         } else if (arg == "--output-dir") {
@@ -58,10 +60,21 @@ Cli parse_cli(int argc, char** argv) {
             print_usage(argv[0]);
             std::exit(EXIT_SUCCESS);
         } else {
-            throw std::runtime_error("Unknown argument: " + arg);
+            throw std::runtime_error("Unknown option: " + arg);
         }
     }
     std::filesystem::create_directories(cli.output_dir);
+
+    if (cli.freq_points == 0) {
+        throw std::runtime_error("--freq-points must be positive");
+    }
+    if (cli.pade_params == 0) {
+        throw std::runtime_error("--pade-params must be positive");
+    }
+    if (cli.frequency_parallel != "auto" && cli.frequency_parallel != "serial" &&
+        cli.frequency_parallel != "mpi" && cli.frequency_parallel != "openmp") {
+        throw std::runtime_error("--frequency-parallel must be one of: auto, serial, mpi, openmp");
+    }
     return cli;
 }
 

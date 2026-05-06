@@ -5,14 +5,27 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(GW_ENABLE_NATIVE "Enable -march=native when supported" ON)
+option(GW_ENABLE_OPENMP "Enable OpenMP support" ON)
+option(GW_ENABLE_OPENMP_KERNEL_LOOPS "Enable OpenMP in local kernel loops" ON)
+option(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL "Enable experimental OpenMP parallelism over outer frequency points" OFF)
+option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
+
+option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
+option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK backend interface placeholder" OFF)
+option(GW_ENABLE_COSMA "Build/link a COSMA backend interface placeholder" OFF)
+option(GW_ENABLE_CUDA "Build/link a cuBLAS/cuSolver backend interface placeholder" OFF)
+
 add_library(gwcore
     src/cli.cpp
+    src/execution.cpp
     src/frequency_grids.cpp
     src/pade.cpp
     src/npy.cpp
     src/linalg.cpp
     src/gw.cpp
     src/io.cpp
+    src/mpi_context.cpp
     src/memory_footprint.cpp
     src/profiling.cpp
 )
@@ -23,20 +36,31 @@ target_compile_options(gwcore PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Wconversion>
 )
 
-option(GW_ENABLE_NATIVE "Enable -march=native when supported" OFF)
 if(GW_ENABLE_NATIVE)
     target_compile_options(gwcore PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-march=native>)
 endif()
 
+if(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL)
+    set(GW_ENABLE_OPENMP ON CACHE BOOL "Enable OpenMP support" FORCE)
+endif()
 
-# Optional backend switches. Each backend gets its own CMake target.
-# This is intentionally not a single mutually-exclusive vendor target: a build may
-# provide several backend implementations at once, and the program can select one
-# through gw::GwSettings::linalg_backend or a future CLI/runtime factory.
-option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
-option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK distributed dense backend" OFF)
-option(GW_ENABLE_COSMA "Build/link a COSMA distributed matrix-multiply backend" OFF)
-option(GW_ENABLE_CUDA "Build/link CUDA/cuBLAS/cuSolver backend code" OFF)
+if(GW_ENABLE_OPENMP)
+    find_package(OpenMP REQUIRED)
+    target_link_libraries(gwcore PUBLIC OpenMP::OpenMP_CXX)
+    target_compile_definitions(gwcore PUBLIC GW_ENABLE_OPENMP=1)
+    if(GW_ENABLE_OPENMP_KERNEL_LOOPS)
+        target_compile_definitions(gwcore PUBLIC GW_ENABLE_OPENMP_KERNEL_LOOPS=1)
+    endif()
+    if(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL)
+        target_compile_definitions(gwcore PUBLIC GW_ENABLE_OPENMP_FREQUENCY_PARALLEL=1)
+    endif()
+endif()
+
+if(GW_ENABLE_MPI OR GW_ENABLE_SCALAPACK OR GW_ENABLE_COSMA)
+    find_package(MPI REQUIRED COMPONENTS CXX)
+    target_link_libraries(gwcore PUBLIC MPI::MPI_CXX)
+    target_compile_definitions(gwcore PUBLIC GW_ENABLE_MPI=1)
+endif()
 
 add_library(gw_linalg_backends INTERFACE)
 
@@ -84,30 +108,29 @@ if(GW_ENABLE_BLAS_LAPACK)
 endif()
 
 if(GW_ENABLE_SCALAPACK)
-    find_package(MPI REQUIRED COMPONENTS CXX)
-    find_package(SCALAPACK REQUIRED)
-    add_library(gw_linalg_scalapack INTERFACE)
-    target_link_libraries(gw_linalg_scalapack INTERFACE MPI::MPI_CXX SCALAPACK::SCALAPACK)
-    target_compile_definitions(gw_linalg_scalapack INTERFACE GW_HAS_SCALAPACK_BACKEND=1)
+    add_library(gw_linalg_scalapack src/linalg_scalapack.cpp)
+    target_include_directories(gw_linalg_scalapack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(gw_linalg_scalapack PUBLIC MPI::MPI_CXX)
+    target_compile_definitions(gw_linalg_scalapack PUBLIC GW_HAS_SCALAPACK_BACKEND=1)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
 endif()
 
 if(GW_ENABLE_COSMA)
-    find_package(MPI REQUIRED COMPONENTS CXX)
-    find_package(COSMA REQUIRED)
-    add_library(gw_linalg_cosma INTERFACE)
-    target_link_libraries(gw_linalg_cosma INTERFACE MPI::MPI_CXX COSMA::cosma)
-    target_compile_definitions(gw_linalg_cosma INTERFACE GW_HAS_COSMA_BACKEND=1)
+    add_library(gw_linalg_cosma src/linalg_cosma.cpp)
+    target_include_directories(gw_linalg_cosma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(gw_linalg_cosma PUBLIC MPI::MPI_CXX)
+    target_compile_definitions(gw_linalg_cosma PUBLIC GW_HAS_COSMA_BACKEND=1)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cosma)
 endif()
 
 if(GW_ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    add_library(gw_linalg_cuda INTERFACE)
-    target_link_libraries(gw_linalg_cuda INTERFACE CUDA::cublas CUDA::cusolver)
-    target_compile_definitions(gw_linalg_cuda INTERFACE GW_HAS_CUDA_BACKEND=1)
-    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cuda)
+    add_library(gw_linalg_cublas src/linalg_cublas.cpp)
+    target_include_directories(gw_linalg_cublas PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(gw_linalg_cublas PUBLIC CUDA::cublas CUDA::cusolver)
+    target_compile_definitions(gw_linalg_cublas PUBLIC GW_HAS_CUDA_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cublas)
 endif()
 
 target_link_libraries(gwcore PUBLIC gw_linalg_backends)
@@ -116,7 +139,7 @@ add_executable(gw src/main.cpp)
 target_link_libraries(gw PRIVATE gwcore)
 
 option(GW_ENABLE_TESTS "Enable CTest-based regression tests" ON)
-if(GW_ENABLE_TESTS)
+if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
     enable_testing()
 
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -138,12 +161,16 @@ if(GW_ENABLE_TESTS)
     add_test(
         NAME serial_h2o_reference_compute
         COMMAND
-            gw
+		    ${CMAKE_COMMAND} -E env
+			OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+			$<TARGET_FILE:gw>
 			--input-dir ${GW_REFERENCE_H2O_DIR}
             --freq-points 200
             --pade-params 16
             --state 5
             --output-dir ${GW_TEST_H2O_DIR}
+			--frequency-parallel serial 
+			--linalg-backend reference
     )
 
 	add_test(
@@ -254,12 +281,15 @@ if(GW_ENABLE_TESTS)
 		add_test(
     	    NAME blas_lapack_h2o_reference_compute
     	    COMMAND
-    	        gw
+		        ${CMAKE_COMMAND} -E env
+			    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=4
+			    $<TARGET_FILE:gw>
 				--input-dir ${GW_REFERENCE_H2O_DIR}
     	        --freq-points 200
     	        --pade-params 16
     	        --state 5
 				--output-dir ${GW_TEST_H2O_BLAS_LAPACK_DIR}
+			    --frequency-parallel serial 
 				--linalg-backend blas-lapack
     	)
 

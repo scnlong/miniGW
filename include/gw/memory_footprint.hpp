@@ -13,6 +13,11 @@ struct MemoryFootprint {
     std::size_t n_ph{};
     std::size_t num_freq_points{};
 
+    bool mpi_enabled{};
+    std::size_t mpi_size{1};
+    FrequencyParallelMode frequency_parallel_mode{FrequencyParallelMode::Serial};
+    std::size_t frequency_workspace_replicas{1};
+
     // Input arrays loaded into GwInput.
     long double input_eri_bytes{};
     long double input_vxc_bytes{};
@@ -33,6 +38,7 @@ struct MemoryFootprint {
     long double frequency_grid_bytes{};
 
     // Per-frequency small work arrays.
+    long double inv_v_bytes{};
     long double pi0_diag_bytes{};
     long double pk_vec_bytes{};
     long double current_sigma_bytes{};
@@ -46,11 +52,15 @@ struct MemoryFootprint {
 
     [[nodiscard]] long double input_bytes() const;
     [[nodiscard]] long double runtime_copy_bytes() const;
-    [[nodiscard]] long double persistent_runtime_bytes() const;
-    [[nodiscard]] long double per_frequency_workspace_bytes() const;
-    [[nodiscard]] long double peak_bytes() const;
+    [[nodiscard]] long double persistent_runtime_bytes_per_rank() const;
+    [[nodiscard]] long double per_frequency_workspace_bytes_one_replica() const;
+    [[nodiscard]] long double replicated_workspace_bytes_per_rank() const;
+    [[nodiscard]] long double peak_bytes_per_rank() const;
+    [[nodiscard]] long double aggregate_peak_bytes_all_ranks() const;
 };
 
+[[nodiscard]] MemoryFootprint estimate_memory_footprint(const GwInput& input,
+                                                        const GwSettings& settings);
 [[nodiscard]] MemoryFootprint estimate_memory_footprint(const GwInput& input,
                                                         std::size_t num_freq_points);
 void print_memory_footprint_report(const MemoryFootprint& footprint);

@@ -55,6 +55,10 @@ std::string_view BlasLapackBackend::name() const noexcept {
     return "blas-lapack";
 }
 
+BackendCapabilities BlasLapackBackend::capabilities() const noexcept {
+    return BackendCapabilities{.thread_safe = true, .uses_internal_threads = true, .distributed_mpi = false, .uses_device_memory = false};
+}
+
 MatrixComplex BlasLapackBackend::inverse(MatrixComplex a) const {
     if (a.rows() != a.cols()) {
         throw std::runtime_error("BlasLapackBackend::inverse: matrix must be square");
