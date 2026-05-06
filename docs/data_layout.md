@@ -51,7 +51,7 @@ struct ParticleHolePair {
 };
 ```
 
-The linear particle-hole index is still equivalent to the original prototype convention,
+The linear particle-hole index is still equivalent to the original convention,
 
 ```text
 ph = i_occ * nvir + a_vir
@@ -68,4 +68,4 @@ integrals.eri(p, q, r, s)
 integrals.vxc(p, q)
 ```
 
-The ERI accessor preserves the exact index order read from `eri_mo.npy`, matching the original Julia/NPZ prototype. The notation must still be verified against reference fixtures before using this as a production scientific implementation.
+The ERI accessor preserves the exact index order read from `eri_mo.npy`, matching the original Julia/NPZ implementation. The notation must still be verified against reference fixtures before using this as a production scientific implementation.

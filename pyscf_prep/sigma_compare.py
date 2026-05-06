@@ -462,8 +462,8 @@ plt.figure(figsize=(10, 6))
 plt.plot(x3, re3, label='Pyscf - Real', linestyle='-', marker='s', color='green')
 plt.plot(x3, im3, label='Pyscf - Imag', linestyle='--', marker='^', color='black')
 
-plt.plot(x4, re4, label='GW_prototype - Real', linestyle='-', marker='o', color='red')
-plt.plot(x4, im4, label='GW_prototype - Imag', linestyle='--', marker='x', color='orange')
+plt.plot(x4, re4, label='miniGW - Real', linestyle='-', marker='o', color='red')
+plt.plot(x4, im4, label='miniGW - Imag', linestyle='--', marker='x', color='orange')
 
 plt.title(f"Comparison of $\Sigma_c$ before Padé approximation")
 plt.xlabel("Frequency")

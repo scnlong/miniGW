@@ -1,6 +1,6 @@
-# gw_prototype
+# miniGW
 
-A C++20 G0W0 prototype.
+A C++20 G0W0 software for molecules using Pyscf for starting point DFT calculations.
 
 This project intentionally starts with a serial CPU implementation and a small self-contained `.npy` reader (Read inputs from pyscf DFT results). The GW equations now call dense linear algebra through `gw::linalg::Backend`, so OpenBLAS/LAPACK, ScaLAPACK, COSMA, cuBLAS/cuSolver, or HIP backends can be added behind this boundary without rewriting the GW driver.
 
