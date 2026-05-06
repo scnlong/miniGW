@@ -36,19 +36,19 @@ if(GW_ENABLE_TESTS)
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 	set(GW_REFERENCE_H2O_DIR
-        ${CMAKE_CURRENT_SOURCE_DIR}/regression_tests/reference/h2o_serial
+        ${CMAKE_CURRENT_SOURCE_DIR}/regression_tests/h2o_serial
     )
 
 	set(GW_TEST_H2O_DIR
-        ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/output/h2o_serial
+        ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_serial
     )
 
 	#set(PYSCF_REFERENCE_H2O_DIR
-	#    ${CMAKE_CURRENT_SOURCE_DIR}/regression_tests/reference/h2o_pyscf
+	#    ${CMAKE_CURRENT_SOURCE_DIR}/regression_tests/h2o_pyscf
 	#)
 
 	#set(PYSCF_TEST_H2O_DIR
-	#    ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/output/h2o_pyscf
+	#    ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_pyscf
 	#)
 
 	#add_test(
