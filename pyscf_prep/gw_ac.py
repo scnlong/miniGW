@@ -108,7 +108,7 @@ def kernel(gw, mo_energy, mo_coeff, Lpq=None, orbs=None,
     sigmaI, omega = get_sigma_diag(gw, orbs, Lpq, freqs, wts)
     #sigmaI, omega = get_sigma_diag(gw, orbs, Lpq, freqs, wts, iw_cutoff=5.0)
     state_to_print = 5 # consistent with previous julia script
-    with open("pyscf_E_c_before_Pade.txt","w") as f:
+    with open("pyscf_E_c_before_Pade.out","w") as f:
         for i,j in zip(sigmaI[state_to_print-1,:].real, sigmaI[state_to_print-1,:].imag):
             j = 1.0*j
             f.write(f'({i:.16f},{j:.16f})\n')

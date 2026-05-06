@@ -1,121 +1,37 @@
+#include "gw/cli.hpp"
 #include "gw/gw.hpp"
 #include "gw/io.hpp"
 #include "gw/npy.hpp"
+#include "gw/profiling.hpp"
 #include "gw/types.hpp"
 
-#include <chrono>
 #include <cstdlib>
-#include <filesystem>
-#include <iomanip>
+#include <fstream>
 #include <iostream>
-#include <optional>
-#include <string>
+#include <stdexcept>
 #include <vector>
-
-namespace {
-
-using Clock = std::chrono::steady_clock;
-
-struct Cli {
-    std::string input_dir{"."};
-    std::string output_dir{"./gw_output"};
-    std::size_t freq_points{200};
-    std::size_t pade_params{16};
-    std::optional<std::size_t> selected_state_1based{5};
-    double eta{0.0};
-};
-
-void print_usage(const char* exe) {
-    std::cerr << "Usage: " << exe << " [options]\n"
-              << "Options:\n"
-              << "  --input-dir PATH        Directory containing eri_mo.npy, mo_energy.npy, vxc_mo.npy, nocc.txt, fermi_energy.txt\n"
-              << "  --freq-points N         Number of imaginary-frequency points [default: 200]\n"
-              << "  --pade-params N         Number of Pade parameters [default: 16]\n"
-              << "  --state N               1-based orbital index to calculate [default: 5]\n"
-              << "  --all-states            Calculate all diagonal states\n"
-              << "  --eta VALUE             Infinitesimal broadening [default: 0.0]\n"
-              << "  --output-dir PATH       Directory containing E_c_before_Pade.txt and E_c.out \n"
-              << "  --help                  Show this message\n";
-}
-
-Cli parse_cli(int argc, char** argv) {
-    Cli cli;
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        auto require_value = [&](const std::string& name) -> std::string {
-            if (i + 1 >= argc) {
-                throw std::runtime_error("Missing value for " + name);
-            }
-            return argv[++i];
-        };
-        if (arg == "--input-dir") {
-            cli.input_dir = require_value(arg);
-        } else if (arg == "--freq-points") {
-            cli.freq_points = static_cast<std::size_t>(std::stoull(require_value(arg)));
-        } else if (arg == "--pade-params") {
-            cli.pade_params = static_cast<std::size_t>(std::stoull(require_value(arg)));
-        } else if (arg == "--state") {
-            cli.selected_state_1based = static_cast<std::size_t>(std::stoull(require_value(arg)));
-        } else if (arg == "--all-states") {
-            cli.selected_state_1based.reset();
-        } else if (arg == "--eta") {
-            cli.eta = std::stod(require_value(arg));
-        } else if (arg == "--output-dir") {
-            cli.output_dir = require_value(arg);
-        } else if (arg == "--help" || arg == "-h") {
-            print_usage(argv[0]);
-            std::exit(EXIT_SUCCESS);
-        } else {
-            throw std::runtime_error("Unknown argument: " + arg);
-        }
-    }
-    std::filesystem::create_directories(cli.output_dir);
-    return cli;
-}
-
-std::string join_path(const std::string& dir, const std::string& file) {
-    return (std::filesystem::path(dir) / file).string();
-}
-
-double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
-    return std::chrono::duration<double>(end - start).count();
-}
-
-void output_profiling_baseline(double read_input_seconds, const gw::GwTimings& timings) {
-    const auto old_flags = std::cout.flags();
-    const auto old_precision = std::cout.precision();
-
-    std::cout << "\n--- Profiling Baseline ---\n";
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << std::left << std::setw(18) << "read input:" << std::right << std::setw(8) << read_input_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "build mapping:" << std::right << std::setw(8) << timings.build_mapping_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "exchange:" << std::right << std::setw(8) << timings.exchange_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "build Pi0:" << std::right << std::setw(8) << timings.build_pi0_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "invert epsilon:" << std::right << std::setw(8) << timings.invert_epsilon_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "sigma_c:" << std::right << std::setw(8) << timings.sigma_c_seconds << " s\n";
-    std::cout << std::left << std::setw(18) << "pade:" << std::right << std::setw(8) << timings.pade_seconds << " s\n";
-
-    std::cout.flags(old_flags);
-    std::cout.precision(old_precision);
-}
-
-} // namespace
 
 int main(int argc, char** argv) {
     try {
-        const Cli cli = parse_cli(argc, argv);
+        const gw::Cli cli = gw::parse_cli(argc, argv);
+        const std::string log_path = gw::join_path(cli.output_dir, "gw.out");
+        std::ofstream log_file(log_path);
+        if (!log_file) {
+            throw std::runtime_error("Could not open log file: " + log_path);
+        }
+        const gw::CoutTee cout_tee(log_file);
 
         std::cout << "\n--- Begin of C++20 G0W0 Calculation ---\n";
         std::cout << "Loading data from: " << cli.input_dir << '\n';
 
-        const auto read_input_start = Clock::now();
+        const auto read_input_start = gw::ProfilingClock::now();
         gw::GwInput input;
-        input.eri_mo = gw::read_tensor4_npy_f64(join_path(cli.input_dir, "eri_mo.npy"));
-        input.mo_energy = gw::read_vector_npy_f64(join_path(cli.input_dir, "mo_energy.npy"));
-        input.vxc_mo = gw::read_matrix_npy_f64(join_path(cli.input_dir, "vxc_mo.npy"));
-        input.nocc = static_cast<std::size_t>(gw::read_int_text(join_path(cli.input_dir, "nocc.txt")));
-        input.fermi_energy = gw::read_double_text(join_path(cli.input_dir, "fermi_energy.txt"));
-        const double read_input_seconds = elapsed_seconds(read_input_start, Clock::now());
+        input.eri_mo = gw::read_tensor4_npy_f64(gw::join_path(cli.input_dir, "eri_mo.npy"));
+        input.mo_energy = gw::read_vector_npy_f64(gw::join_path(cli.input_dir, "mo_energy.npy"));
+        input.vxc_mo = gw::read_matrix_npy_f64(gw::join_path(cli.input_dir, "vxc_mo.npy"));
+        input.nocc = static_cast<std::size_t>(gw::read_int_text(gw::join_path(cli.input_dir, "nocc.txt")));
+        input.fermi_energy = gw::read_double_text(gw::join_path(cli.input_dir, "fermi_energy.txt"));
+        const double read_input_seconds = gw::elapsed_seconds(read_input_start, gw::ProfilingClock::now());
 
         const std::size_t nmo = input.mo_energy.size();
         const std::size_t nvirt = nmo - input.nocc;
@@ -146,17 +62,17 @@ int main(int argc, char** argv) {
         const gw::GwResult result = gw::run_g0w0(input, settings);
 
         const std::size_t output_state = settings.selected_state_0based.value_or(0);
-        gw::output_self_energy_before_pade(cli.output_dir+"/E_c_before_Pade.txt", result.sigma_c_im_points, output_state);
+        gw::output_self_energy_before_pade(cli.output_dir+"/E_c_before_Pade.out", result.sigma_c_im_points, output_state);
         std::vector<gw::Complex> state_sigma(result.omegas.size());
         for (std::size_t f = 0; f < result.omegas.size(); ++f) {
             state_sigma[f] = result.sigma_c_im_points(output_state, f);
         }
         gw::GwTimings timings = result.timings;
-        const auto output_pade_start = Clock::now();
+        const auto output_pade_start = gw::ProfilingClock::now();
         gw::output_self_energy_after_pade(cli.output_dir+"/E_c.out", state_sigma, result.omegas, settings.num_pade_params, 19836, input.fermi_energy);
-        timings.pade_seconds += elapsed_seconds(output_pade_start, Clock::now());
+        timings.pade_seconds += gw::elapsed_seconds(output_pade_start, gw::ProfilingClock::now());
 
-        output_profiling_baseline(read_input_seconds, timings);
+        gw::output_profiling_baseline(read_input_seconds, timings);
 
         std::cout << "\n--- G0W0 Calculation Summary ---\n";
         if (settings.selected_state_0based.has_value()) {

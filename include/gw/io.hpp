@@ -2,10 +2,25 @@
 
 #include "gw/types.hpp"
 
+#include <iosfwd>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace gw {
+
+class CoutTee {
+public:
+    explicit CoutTee(std::ostream& log_stream);
+    ~CoutTee();
+
+    CoutTee(const CoutTee&) = delete;
+    CoutTee& operator=(const CoutTee&) = delete;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 int read_int_text(const std::string& path);
 double read_double_text(const std::string& path);

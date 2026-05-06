@@ -4,9 +4,57 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <streambuf>
 #include <stdexcept>
 
 namespace gw {
+namespace {
+
+class TeeBuffer : public std::streambuf {
+public:
+    TeeBuffer(std::streambuf* first, std::streambuf* second) : first_(first), second_(second) {}
+
+private:
+    int overflow(int ch) override {
+        if (ch == traits_type::eof()) {
+            return traits_type::not_eof(ch);
+        }
+        const int first_result = first_->sputc(static_cast<char>(ch));
+        const int second_result = second_->sputc(static_cast<char>(ch));
+        if (first_result == traits_type::eof() || second_result == traits_type::eof()) {
+            return traits_type::eof();
+        }
+        return ch;
+    }
+
+    int sync() override {
+        const int first_result = first_->pubsync();
+        const int second_result = second_->pubsync();
+        return first_result == 0 && second_result == 0 ? 0 : -1;
+    }
+
+    std::streambuf* first_;
+    std::streambuf* second_;
+};
+
+} // namespace
+
+class CoutTee::Impl {
+public:
+    explicit Impl(std::ostream& log_stream) : tee_buffer_(std::cout.rdbuf(), log_stream.rdbuf()), old_buffer_(std::cout.rdbuf(&tee_buffer_)) {}
+
+    ~Impl() {
+        std::cout.rdbuf(old_buffer_);
+    }
+
+private:
+    TeeBuffer tee_buffer_;
+    std::streambuf* old_buffer_;
+};
+
+CoutTee::CoutTee(std::ostream& log_stream) : impl_(std::make_unique<Impl>(log_stream)) {}
+
+CoutTee::~CoutTee() = default;
 
 int read_int_text(const std::string& path) {
     std::ifstream in(path);

@@ -133,23 +133,85 @@ def compare_complex_vectors(
     return False
 
 
+ENERGY_COLUMNS = ("KS Energy", "Sigma_x", "Sigma_c", "Vxc", "QP Energy")
+
+
+def read_energy_summary(log_file: Path, orbital: int) -> dict[str, float]:
+    in_summary = False
+    target = str(orbital)
+
+    with log_file.open("r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped == "--- G0W0 Calculation Summary ---":
+                in_summary = True
+                continue
+
+            if not in_summary:
+                continue
+
+            if stripped.startswith("--- End"):
+                break
+
+            parts = stripped.split()
+            if len(parts) != 6 or parts[0] != target:
+                continue
+
+            return {name: float(value) for name, value in zip(ENERGY_COLUMNS, parts[1:])}
+
+    raise ValueError(f"Could not find orbital {orbital} in {log_file}")
+
+
+def compare_energy_summaries(
+    reference: dict[str, float],
+    output: dict[str, float],
+    rtol: float,
+    atol: float,
+) -> bool:
+    ok = True
+    for name in ENERGY_COLUMNS:
+        ref = reference[name]
+        out = output[name]
+        if not math.isclose(out, ref, rel_tol=rtol, abs_tol=atol):
+            ok = False
+            print(
+                f"FAILED: {name}: output={out:.8g}, reference={ref:.8g}, "
+                f"abs_error={abs(out - ref):.6e}"
+            )
+
+    if ok:
+        print("OK")
+        for name in ENERGY_COLUMNS:
+            print(f"  {name:<10}: {output[name]:.8g}")
+        return True
+
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compare complex-valued GW reference output files."
+        description="Compare GW reference output files."
+    )
+
+    parser.add_argument(
+        "--comparison",
+        choices=["complex-vector", "energy-summary"],
+        default="complex-vector",
+        help="Comparison type.",
     )
 
     parser.add_argument(
         "--reference-file",
         type=Path,
         required=True,
-        help="Reference complex file, e.g. pyscf_E_c_before_Pade.txt",
+        help="Reference file.",
     )
 
     parser.add_argument(
         "--output-file",
         type=Path,
         required=True,
-        help="Output complex file, e.g. E_c_before_Pade.txt",
+        help="Output file.",
     )
 
     parser.add_argument(
@@ -176,6 +238,12 @@ def main() -> int:
         ),
     )
 
+    parser.add_argument(
+        "--orbital",
+        type=int,
+        help="1-based orbital index for --comparison energy-summary.",
+    )
+
     args = parser.parse_args()
 
     if not args.reference_file.exists():
@@ -187,16 +255,32 @@ def main() -> int:
         return 1
 
     try:
-        reference = read_complex_vector(args.reference_file)
-        output = read_complex_vector(args.output_file)
+        if args.comparison == "complex-vector":
+            reference = read_complex_vector(args.reference_file)
+            output = read_complex_vector(args.output_file)
 
-        ok = compare_complex_vectors(
-            reference=reference,
-            output=output,
-            rtol=args.rtol,
-            atol=args.atol,
-            compare_mode=args.compare_mode,
-        )
+            ok = compare_complex_vectors(
+                reference=reference,
+                output=output,
+                rtol=args.rtol,
+                atol=args.atol,
+                compare_mode=args.compare_mode,
+            )
+        elif args.comparison == "energy-summary":
+            if args.orbital is None:
+                raise ValueError("--orbital is required for --comparison energy-summary")
+
+            reference = read_energy_summary(args.reference_file, args.orbital)
+            output = read_energy_summary(args.output_file, args.orbital)
+
+            ok = compare_energy_summaries(
+                reference=reference,
+                output=output,
+                rtol=args.rtol,
+                atol=args.atol,
+            )
+        else:
+            raise ValueError(f"Unknown comparison type: {args.comparison}")
 
         return 0 if ok else 1
 

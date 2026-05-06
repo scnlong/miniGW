@@ -202,6 +202,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     const ParticleHoleBasis ph_basis(orbitals);
 
     auto [omegas, weights] = generate_transformed_legendre_grid(settings.num_freq_points_total);
+	std::cout << "Total number of Padé  parameters: " << settings.num_pade_params << '\n';
     std::cout << "Total number of transformed Gauss-Legendre frequency points: " << settings.num_freq_points_total << '\n';
 
     GwResult result;

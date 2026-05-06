@@ -421,14 +421,14 @@ list2 = [i for i in list2 if i != "" ]
 list3 = []
 list4 = []
 
-with open("pyscf_E_c_before_Pade.txt","r") as f:
+with open("pyscf_E_c_before_Pade.out","r") as f:
     lines = f.readlines()
     for i in lines:
         real_str, imag_str = i.strip().strip("()").split(",")
         z = complex(float(real_str), float(imag_str))
         list3.append(z)
 
-with open("E_c_before_Pade.txt","r") as f:
+with open("E_c_before_Pade.out","r") as f:
     lines = f.readlines()
     for i in lines:
         real_str, imag_str = i.strip().strip("()").split(",")
