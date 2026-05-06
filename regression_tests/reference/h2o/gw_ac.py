@@ -585,7 +585,7 @@ if __name__ == '__main__':
         [8 , (0. , 0.     , 0.)],
         [1 , (0. , 0.7571 , 0.5861)],
         [1 , (0. , -0.7571 , 0.5861)]]
-    mol.basis = 'def2-svp'
+    mol.basis = 'dzvp'
     mol.build()
 
     mf = dft.RKS(mol)

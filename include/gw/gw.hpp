@@ -22,12 +22,22 @@ struct GwSettings {
     double eta{0.0};
 };
 
+struct GwTimings {
+    double exchange_seconds{0.0};
+    double build_mapping_seconds{0.0};
+    double build_pi0_seconds{0.0};
+    double invert_epsilon_seconds{0.0};
+    double sigma_c_seconds{0.0};
+    double pade_seconds{0.0};
+};
+
 struct GwResult {
     MatrixReal sigma_x;
     MatrixComplex sigma_c_im_points;
     std::vector<double> qp_energy;
     std::vector<double> omegas;
     std::vector<double> weights;
+    GwTimings timings;
 };
 
 MatrixReal calculate_exchange(const Tensor4Real& eri_mo, std::size_t nocc);

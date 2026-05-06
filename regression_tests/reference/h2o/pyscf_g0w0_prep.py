@@ -12,7 +12,7 @@ HARTREE_TO_EV = 27.211386245981
 # Example: Water molecule
 mol = gto.M(
     atom = 'O 0 0 0; H 0.7571 0.0000 0.5861; H -0.7571 0.0000 0.5861',
-    basis = 'def2-svp',  # A minimal basis set for demonstration
+    basis = 'dzvp',  # A minimal basis set for demonstration
     charge = 0,
     spin = 0,
     verbose = 0, # Suppress PySCF verbose output

@@ -4,12 +4,19 @@
 #include "gw/pade.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
 
 namespace gw {
 namespace {
+
+using Clock = std::chrono::steady_clock;
+
+double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double>(end - start).count();
+}
 
 MatrixComplex identity_complex(std::size_t n) {
     MatrixComplex out(n, n, Complex{0.0, 0.0});
@@ -198,8 +205,12 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     GwResult result;
     result.omegas = omegas;
     result.weights = weights;
-    result.sigma_x = calculate_exchange(input.eri_mo, nocc);
 
+    auto start = Clock::now();
+    result.sigma_x = calculate_exchange(input.eri_mo, nocc);
+    result.timings.exchange_seconds = elapsed_seconds(start, Clock::now());
+
+    start = Clock::now();
     const MatrixReal v_ph = calculate_v_ph_matrix(input.eri_mo, nocc, nvirt);
     std::cout << "Shape of V_ph matrix: (" << v_ph.rows() << ", " << v_ph.cols() << ")\n";
     const Tensor3Real pq_ph = calculate_pq_ph_matrix(input.eri_mo, nocc, nvirt);
@@ -209,20 +220,28 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     for (std::size_t i = 0; i < settings.num_freq_points_total; ++i) {
         omega_im[i] = Complex{0.0, omegas[i]};
     }
+    result.timings.build_mapping_seconds = elapsed_seconds(start, Clock::now());
 
     result.sigma_c_im_points = MatrixComplex(nmo, settings.num_freq_points_total, Complex{0.0, 0.0});
     const auto states = selected_states(nmo, settings.selected_state_0based);
 
     std::cout << "Starting Sigma_c(iw) calculation...\n";
+    start = Clock::now();
     for (std::size_t f_n = 0; f_n < settings.num_freq_points_total; ++f_n) {
         const Complex omega_n_im = omega_im[f_n];
         std::vector<Complex> current_sigma(nmo, Complex{0.0, 0.0});
 
         for (std::size_t f_prime = 0; f_prime < settings.num_freq_points_total; ++f_prime) {
             const Complex omega_prime_im = omega_im[f_prime];
+            auto phase_start = Clock::now();
             const auto pi0_diag = calculate_pi0_ph_diag(omega_prime_im, input.mo_energy, nocc, nvirt, settings.eta);
-            const MatrixComplex w_c_ph = calculate_w_0_c_matrix(omega_prime_im, v_ph, pi0_diag);
+            result.timings.build_pi0_seconds += elapsed_seconds(phase_start, Clock::now());
 
+            phase_start = Clock::now();
+            const MatrixComplex w_c_ph = calculate_w_0_c_matrix(omega_prime_im, v_ph, pi0_diag);
+            result.timings.invert_epsilon_seconds += elapsed_seconds(phase_start, Clock::now());
+
+            phase_start = Clock::now();
             for (const auto p_idx : states) {
                 for (std::size_t k_idx = 0; k_idx < nmo; ++k_idx) {
                     std::vector<double> pk_vec(n_ph, 0.0);
@@ -246,6 +265,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
                     current_sigma[p_idx] -= g0_term * w_minus_v * weights[f_prime];
                 }
             }
+            result.timings.sigma_c_seconds += elapsed_seconds(phase_start, Clock::now());
         }
         for (std::size_t p = 0; p < nmo; ++p) {
             result.sigma_c_im_points(p, f_n) = current_sigma[p] / kPi;
@@ -255,7 +275,12 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         }
     }
     std::cout << "Sigma_c(iw) calculation complete.\n";
+    result.timings.sigma_c_seconds += elapsed_seconds(start, Clock::now())
+                                    - result.timings.build_pi0_seconds
+                                    - result.timings.invert_epsilon_seconds
+                                    - result.timings.sigma_c_seconds;
 
+    start = Clock::now();
     result.qp_energy.assign(nmo, 0.0);
     constexpr std::size_t max_iterations = 200;
     constexpr double tolerance = 1e-6;
@@ -278,6 +303,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         }
         result.qp_energy[i] = current_qp;
     }
+    result.timings.pade_seconds = elapsed_seconds(start, Clock::now());
 
     return result;
 }

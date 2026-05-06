@@ -3,14 +3,18 @@
 #include "gw/npy.hpp"
 #include "gw/types.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace {
+
+using Clock = std::chrono::steady_clock;
 
 struct Cli {
     std::string input_dir{"."};
@@ -56,8 +60,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.selected_state_1based.reset();
         } else if (arg == "--eta") {
             cli.eta = std::stod(require_value(arg));
-		} else if (arg == "--output-dir") {
-			cli.output_dir = require_value(arg);
+        } else if (arg == "--output-dir") {
+            cli.output_dir = require_value(arg);
         } else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
             std::exit(EXIT_SUCCESS);
@@ -73,6 +77,28 @@ std::string join_path(const std::string& dir, const std::string& file) {
     return (std::filesystem::path(dir) / file).string();
 }
 
+double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
+    return std::chrono::duration<double>(end - start).count();
+}
+
+void output_profiling_baseline(double read_input_seconds, const gw::GwTimings& timings) {
+    const auto old_flags = std::cout.flags();
+    const auto old_precision = std::cout.precision();
+
+    std::cout << "\n--- Profiling Baseline ---\n";
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << std::left << std::setw(18) << "read input:" << std::right << std::setw(8) << read_input_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "build mapping:" << std::right << std::setw(8) << timings.build_mapping_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "exchange:" << std::right << std::setw(8) << timings.exchange_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "build Pi0:" << std::right << std::setw(8) << timings.build_pi0_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "invert epsilon:" << std::right << std::setw(8) << timings.invert_epsilon_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "sigma_c:" << std::right << std::setw(8) << timings.sigma_c_seconds << " s\n";
+    std::cout << std::left << std::setw(18) << "pade:" << std::right << std::setw(8) << timings.pade_seconds << " s\n";
+
+    std::cout.flags(old_flags);
+    std::cout.precision(old_precision);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -82,12 +108,14 @@ int main(int argc, char** argv) {
         std::cout << "\n--- Begin of C++20 G0W0 Calculation ---\n";
         std::cout << "Loading data from: " << cli.input_dir << '\n';
 
+        const auto read_input_start = Clock::now();
         gw::GwInput input;
         input.eri_mo = gw::read_tensor4_npy_f64(join_path(cli.input_dir, "eri_mo.npy"));
         input.mo_energy = gw::read_vector_npy_f64(join_path(cli.input_dir, "mo_energy.npy"));
         input.vxc_mo = gw::read_matrix_npy_f64(join_path(cli.input_dir, "vxc_mo.npy"));
         input.nocc = static_cast<std::size_t>(gw::read_int_text(join_path(cli.input_dir, "nocc.txt")));
         input.fermi_energy = gw::read_double_text(join_path(cli.input_dir, "fermi_energy.txt"));
+        const double read_input_seconds = elapsed_seconds(read_input_start, Clock::now());
 
         const std::size_t nmo = input.mo_energy.size();
         const std::size_t nvirt = nmo - input.nocc;
@@ -123,7 +151,12 @@ int main(int argc, char** argv) {
         for (std::size_t f = 0; f < result.omegas.size(); ++f) {
             state_sigma[f] = result.sigma_c_im_points(output_state, f);
         }
+        gw::GwTimings timings = result.timings;
+        const auto output_pade_start = Clock::now();
         gw::output_self_energy_after_pade(cli.output_dir+"/E_c.out", state_sigma, result.omegas, settings.num_pade_params, 19836, input.fermi_energy);
+        timings.pade_seconds += elapsed_seconds(output_pade_start, Clock::now());
+
+        output_profiling_baseline(read_input_seconds, timings);
 
         std::cout << "\n--- G0W0 Calculation Summary ---\n";
         if (settings.selected_state_0based.has_value()) {
