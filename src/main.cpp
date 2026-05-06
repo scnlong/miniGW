@@ -1,6 +1,10 @@
 #include "gw/cli.hpp"
 #include "gw/gw.hpp"
 #include "gw/io.hpp"
+#include "gw/linalg.hpp"
+#ifdef GW_HAS_BLAS_LAPACK_BACKEND
+#include "gw/linalg_blas_lapack.hpp"
+#endif
 #include "gw/npy.hpp"
 #include "gw/profiling.hpp"
 #include "gw/types.hpp"
@@ -47,6 +51,18 @@ int main(int argc, char** argv) {
                   << input.eri_mo.dim2() << ", " << input.eri_mo.dim3() << ")\n";
 
         gw::GwSettings settings;
+        if (cli.linalg_backend == "reference") {
+            settings.linalg_backend = gw::linalg::make_reference_backend();
+        } else if (cli.linalg_backend == "blas-lapack") {
+#ifdef GW_HAS_BLAS_LAPACK_BACKEND
+            settings.linalg_backend = gw::linalg::make_blas_lapack_backend();
+#else
+            throw std::runtime_error("This executable was built without the BLAS/LAPACK backend. Reconfigure with -DGW_ENABLE_BLAS_LAPACK=ON, or use --linalg-backend reference.");
+#endif
+        } else {
+            throw std::runtime_error("Unknown --linalg-backend value: " + cli.linalg_backend + ". Supported values: reference, blas-lapack.");
+        }
+
         settings.num_freq_points_total = cli.freq_points;
         settings.num_pade_params = cli.pade_params;
         settings.eta = cli.eta;

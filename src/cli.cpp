@@ -17,6 +17,7 @@ void print_usage(const char* exe) {
               << "  --state N               1-based orbital index to calculate [default: 5]\n"
               << "  --all-states            Calculate all diagonal states\n"
               << "  --eta VALUE             Infinitesimal broadening [default: 0.0]\n"
+              << "  --linalg-backend NAME   Linear algebra backend: reference or blas-lapack [default: reference]\n"
               << "  --output-dir PATH       Directory containing E_c_before_Pade.out, E_c.out, and gw.out \n"
               << "  --help                  Show this message\n";
 }
@@ -45,6 +46,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.selected_state_1based.reset();
         } else if (arg == "--eta") {
             cli.eta = std::stod(require_value(arg));
+        } else if (arg == "--linalg-backend") {
+            cli.linalg_backend = require_value(arg);
         } else if (arg == "--output-dir") {
             cli.output_dir = require_value(arg);
         } else if (arg == "--help" || arg == "-h") {

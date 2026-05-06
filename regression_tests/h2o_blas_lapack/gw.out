@@ -1,0 +1,53 @@
+
+--- Begin of C++20 G0W0 Calculation ---
+Loading data from: .
+  - Vxc MO basis shape: (18, 18)
+  - Fermi energy (eV): -2.93264
+  - Number of occupied orbitals: 5
+  - Number of virtual orbitals: 13
+  - Number of MOs: 18
+  - Number of particle-hole states: 65
+  - ERI MO shape: (18, 18, 18, 18)
+Linear algebra backend: blas-lapack
+Total number of Padé  parameters: 16
+Total number of transformed Gauss-Legendre frequency points: 200
+Shape of V_ph matrix: (65, 65)
+Shape of pq_ph tensor: (18, 18, 65)
+Starting Sigma_c(iw) calculation...
+  completed frequency 10 / 200 in 2.35955 s
+  completed frequency 20 / 200 in 1.73687 s
+  completed frequency 30 / 200 in 2.01973 s
+  completed frequency 40 / 200 in 1.92254 s
+  completed frequency 50 / 200 in 1.92274 s
+  completed frequency 60 / 200 in 2.94804 s
+  completed frequency 70 / 200 in 2.35898 s
+  completed frequency 80 / 200 in 2.07292 s
+  completed frequency 90 / 200 in 2.26185 s
+  completed frequency 100 / 200 in 2.42131 s
+  completed frequency 110 / 200 in 2.13488 s
+  completed frequency 120 / 200 in 2.50174 s
+  completed frequency 130 / 200 in 2.15454 s
+  completed frequency 140 / 200 in 2.11357 s
+  completed frequency 150 / 200 in 2.35933 s
+  completed frequency 160 / 200 in 1.86123 s
+  completed frequency 170 / 200 in 1.78463 s
+  completed frequency 180 / 200 in 2.01207 s
+  completed frequency 190 / 200 in 1.83915 s
+  completed frequency 200 / 200 in 1.81994 s
+Sigma_c(iw) calculation complete.
+
+--- Profiling Baseline ---
+read input:           0.00 s
+build mapping:        0.00 s
+exchange:             0.00 s
+build Pi0:            0.09 s
+invert epsilon:      33.88 s
+sigma_c:              8.64 s
+pade:                 0.07 s
+
+--- G0W0 Calculation Summary ---
+Orbital   KS Energy      Sigma_x        Sigma_c        Vxc            QP Energy      
+-------   ---------      -------        -------        -------        ---------      
+5         -6.85145       -26.3511       2.49104        -19.3757       -11.3359       
+
+--- End of C++20 G0W0 Calculation ---

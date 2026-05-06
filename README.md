@@ -70,7 +70,7 @@ The default backend is `reference-serial`; it is intentionally simple and is mea
 CMake exposes preparation switches for vendor libraries:
 
 ```bash
--DGW_ENABLE_OPENBLAS=ON
+-DGW_ENABLE_BLAS_LAPACK=ON
 -DGW_ENABLE_SCALAPACK=ON
 -DGW_ENABLE_COSMA=ON
 -DGW_ENABLE_CUDA=ON

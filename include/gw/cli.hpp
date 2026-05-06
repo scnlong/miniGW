@@ -13,6 +13,7 @@ struct Cli {
     std::size_t pade_params{16};
     std::optional<std::size_t> selected_state_1based{5};
     double eta{0.0};
+    std::string linalg_backend{"reference"};
 };
 
 Cli parse_cli(int argc, char** argv);
