@@ -2,6 +2,7 @@
 #include "gw/gw.hpp"
 #include "gw/io.hpp"
 #include "gw/linalg.hpp"
+#include "gw/memory_footprint.hpp"
 #ifdef GW_HAS_BLAS_LAPACK_BACKEND
 #include "gw/linalg_blas_lapack.hpp"
 #endif
@@ -74,6 +75,8 @@ int main(int argc, char** argv) {
         } else {
             settings.selected_state_0based.reset();
         }
+
+        gw::print_memory_footprint_report(gw::estimate_memory_footprint(input, settings.num_freq_points_total));
 
         const gw::GwResult result = gw::run_g0w0(input, settings);
 

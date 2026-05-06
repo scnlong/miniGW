@@ -13,6 +13,7 @@ add_library(gwcore
     src/linalg.cpp
     src/gw.cpp
     src/io.cpp
+    src/memory_footprint.cpp
     src/profiling.cpp
 )
 

@@ -1,8 +1,8 @@
 # miniGW
 
-A C++20 G0W0 software for molecules using Pyscf for starting point DFT calculations.
+A compact molecular G0W0 code written in modern C++20, using PySCF as the DFT starting point.
 
-This project intentionally starts with a serial CPU implementation and a small self-contained `.npy` reader (Read inputs from pyscf DFT results). The GW equations now call dense linear algebra through `gw::linalg::Backend`, so OpenBLAS/LAPACK, ScaLAPACK, COSMA, cuBLAS/cuSolver, or HIP backends can be added behind this boundary without rewriting the GW driver.
+The project starts from a serial CPU implementation and a small self-contained `.npy` reader for importing PySCF-generated DFT data. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, cuBLAS/cuSolver, or HIP backends to be added without rewriting the GW driver.
 
 ## Scope
 
@@ -28,7 +28,7 @@ cmake --build build -j 4
 
 ## Expected input files
 
-Run a pyscf DFT calculation (`pyscf_g0w0_prep.py` script from `pyscf_prep` directory)and its outputs contain:
+Run a pyscf DFT calculation (`pyscf_g0w0_prep.py` script from `pyscf_prep` directory) and its outputs contain:
 
 ```text
 eri_mo.npy
