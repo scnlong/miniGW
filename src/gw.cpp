@@ -4,7 +4,9 @@
 #include "gw/pade.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -13,6 +15,18 @@ namespace gw {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
+std::atomic_bool g_openmp_kernel_loops_enabled{true};
+
+bool kernel_loops_enabled() noexcept {
+    return g_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
+}
+#else
+bool kernel_loops_enabled() noexcept {
+    return false;
+}
+#endif
 
 double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
     return std::chrono::duration<double>(end - start).count();
@@ -25,7 +39,7 @@ bool root_rank(const GwSettings& settings) noexcept {
 MatrixComplex to_complex(const MatrixReal& in) {
     MatrixComplex out(in.rows(), in.cols(), Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-   #pragma omp parallel for collapse(2) schedule(static)
+   #pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < in.rows(); ++i) {
         for (std::size_t j = 0; j < in.cols(); ++j) {
@@ -221,7 +235,7 @@ MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularInteg
 
     MatrixReal sigma_x(orbitals.nmo(), orbitals.nmo(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t q = 0; q < orbitals.nmo(); ++q) {
         for (std::size_t p = 0; p < orbitals.nmo(); ++p) {
@@ -240,7 +254,7 @@ std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasi
     std::vector<Complex> diag(ph_basis.size());
     const Complex ieta{0.0, eta};
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t ph = 0; ph < ph_basis.size(); ++ph) {
         const ParticleHolePair& ia = ph_basis[ph];
@@ -255,7 +269,7 @@ std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasi
 MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis) {
     MatrixReal v_ph(ph_basis.size(), ph_basis.size(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t ph_ia = 0; ph_ia < ph_basis.size(); ++ph_ia) {
         for (std::size_t ph_jb = 0; ph_jb < ph_basis.size(); ++ph_jb) {
@@ -281,7 +295,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
 
     MatrixComplex epsilon(n, n, Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static)
+#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t k = 0; k < n; ++k) {
@@ -289,7 +303,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
         }
     }
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         epsilon(i, i) += Complex{1.0, 0.0};
@@ -297,7 +311,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
 
     MatrixComplex inv_eps = backend.inverse(epsilon);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         inv_eps(i, i) -= Complex{1.0, 0.0};
@@ -312,7 +326,7 @@ Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const Pa
     const std::size_t nmo = integrals.nmo();
     Tensor3Real out(nmo, nmo, ph_basis.size(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(3) schedule(static)
+#pragma omp parallel for collapse(3) schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t ph = 0; ph < ph_basis.size(); ++ph) {
         for (std::size_t q = 0; q < nmo; ++q) {
@@ -328,6 +342,9 @@ Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const Pa
 // g0w0 main function
 GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     const auto run_start = Clock::now();
+#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
+    g_openmp_kernel_loops_enabled.store(settings.execution.openmp_kernel_loops, std::memory_order_relaxed);
+#endif
 
 	// set up parameters
     OrbitalSpace orbitals(input.mo_energy, input.nocc, input.fermi_energy);
@@ -339,6 +356,9 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     const auto caps = linalg_backend.capabilities();
 
     if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
+        if (!caps.thread_safe) {
+            throw std::runtime_error("OpenMP frequency parallelism requires a thread-safe linear algebra backend.");
+        }
         if (caps.distributed_mpi || caps.uses_device_memory) {
             throw std::runtime_error("OpenMP frequency parallelism is restricted to local CPU backends. Use MPI frequency distribution or a backend-managed GPU task queue for distributed/device backends.");
         }
@@ -352,7 +372,18 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     if (root_rank(settings)) {
         std::cout << "Linear algebra backend: " << linalg_backend.name() << '\n';
         std::cout << "Frequency parallel mode: " << to_string(settings.execution.frequency_parallel_mode) << '\n';
+        std::cout << "OpenMP kernel loops: " << (settings.execution.openmp_kernel_loops ? "enabled" : "disabled") << '\n';
         std::cout << "MPI rank/size: " << settings.execution.mpi_rank << " / " << settings.execution.mpi_size << '\n';
+        if (settings.execution.mpi_size > 1 &&
+            (settings.execution.openmp_kernel_loops || caps.uses_internal_threads)) {
+            std::cout << "Warning: MPI ranks are combined with local threaded work. "
+                      << "For a first MPI run, prefer OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1.\n";
+        } else if (caps.uses_internal_threads &&
+                   std::getenv("OPENBLAS_NUM_THREADS") == nullptr &&
+                   std::getenv("MKL_NUM_THREADS") == nullptr) {
+            std::cout << "Warning: BLAS/LAPACK backend may use internal threads. "
+                      << "Set OPENBLAS_NUM_THREADS or MKL_NUM_THREADS for reproducible CPU usage.\n";
+        }
     }
 
     auto [omegas, weights] = generate_transformed_legendre_grid(settings.num_freq_points_total);
@@ -380,7 +411,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 	// set up freq points
     std::vector<Complex> omega_im(settings.num_freq_points_total);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < settings.num_freq_points_total; ++i) {
         omega_im[i] = Complex{0.0, omegas[i]};

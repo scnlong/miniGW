@@ -17,8 +17,9 @@ void print_usage(const char* exe) {
               << "  --state N                    1-based orbital index to calculate [default: 5]\n"
               << "  --all-states                 Calculate all diagonal states\n"
               << "  --eta VALUE                  Infinitesimal broadening [default: 0.0]\n"
-              << "  --linalg-backend NAME        reference, blas-lapack, scalapack, cosma, or cublas [default: reference]\n"
+              << "  --linalg-backend NAME        reference, blas-lapack, scalapack, cosma, or cublas [default: blas-lapack]\n"
               << "  --frequency-parallel MODE    auto, serial, mpi, or openmp [default: auto]\n"
+              << "  --kernel-parallel MODE       auto, serial, or openmp for local kernel loops [default: auto]\n"
               << "  --print-memory-footprint     Print an algorithmic memory estimate before running GW\n"
               << "  --output-dir PATH            Directory containing E_c_before_Pade.out, E_c.out, and gw.out\n"
               << "  --help                       Show this message\n";
@@ -52,6 +53,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.linalg_backend = require_value(arg);
         } else if (arg == "--frequency-parallel") {
             cli.frequency_parallel = require_value(arg);
+        } else if (arg == "--kernel-parallel") {
+            cli.kernel_parallel = require_value(arg);
         } else if (arg == "--print-memory-footprint") {
             cli.print_memory_footprint = true;
         } else if (arg == "--output-dir") {
@@ -74,6 +77,10 @@ Cli parse_cli(int argc, char** argv) {
     if (cli.frequency_parallel != "auto" && cli.frequency_parallel != "serial" &&
         cli.frequency_parallel != "mpi" && cli.frequency_parallel != "openmp") {
         throw std::runtime_error("--frequency-parallel must be one of: auto, serial, mpi, openmp");
+    }
+    if (cli.kernel_parallel != "auto" && cli.kernel_parallel != "serial" &&
+        cli.kernel_parallel != "openmp") {
+        throw std::runtime_error("--kernel-parallel must be one of: auto, serial, openmp");
     }
     return cli;
 }

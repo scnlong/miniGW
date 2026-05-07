@@ -15,6 +15,7 @@ struct Cli {
     double eta{0.0};
     std::string linalg_backend{"blas-lapack"};
     std::string frequency_parallel{"auto"};
+    std::string kernel_parallel{"auto"};
     bool print_memory_footprint{true};
 };
 

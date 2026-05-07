@@ -34,6 +34,9 @@ namespace {
 
 gw::FrequencyParallelMode choose_frequency_parallel_mode(const gw::Cli& cli, const gw::MpiContext& mpi) {
     if (cli.frequency_parallel == "serial") {
+        if (mpi.size() > 1) {
+            throw std::runtime_error("--frequency-parallel serial must not be launched with multiple MPI ranks; run without mpirun or use --frequency-parallel mpi");
+        }
         return gw::FrequencyParallelMode::Serial;
     }
     if (cli.frequency_parallel == "mpi") {
@@ -78,6 +81,29 @@ std::size_t frequency_workspace_replicas(gw::FrequencyParallelMode mode) {
 #endif
     }
     return 1;
+}
+
+bool choose_openmp_kernel_loops(const gw::Cli& cli, gw::FrequencyParallelMode frequency_mode) {
+    if (cli.kernel_parallel == "serial") {
+        return false;
+    }
+    if (cli.kernel_parallel == "openmp") {
+#ifndef GW_ENABLE_OPENMP_KERNEL_LOOPS
+        throw std::runtime_error("--kernel-parallel openmp requires -DGW_ENABLE_OPENMP_KERNEL_LOOPS=ON");
+#else
+        return true;
+#endif
+    }
+
+    // In auto mode, avoid multiplying MPI ranks by OpenMP kernel threads.
+    if (frequency_mode == gw::FrequencyParallelMode::MPI) {
+        return false;
+    }
+#ifdef GW_ENABLE_OPENMP_KERNEL_LOOPS
+    return true;
+#else
+    return false;
+#endif
 }
 
 } // namespace
@@ -177,12 +203,10 @@ int main(int argc, char** argv) {
             settings.selected_state_0based.reset();
         }
 
+        settings.execution.frequency_parallel_mode = choose_frequency_parallel_mode(cli, mpi);
         settings.execution.mpi_rank = static_cast<std::size_t>(mpi.rank());
         settings.execution.mpi_size = static_cast<std::size_t>(mpi.size());
-#ifdef GW_ENABLE_OPENMP_KERNEL_LOOPS
-        settings.execution.openmp_kernel_loops = true;
-#endif
-        settings.execution.frequency_parallel_mode = choose_frequency_parallel_mode(cli, mpi);
+        settings.execution.openmp_kernel_loops = choose_openmp_kernel_loops(cli, settings.execution.frequency_parallel_mode);
         settings.execution.openmp_frequency_parallel = settings.execution.frequency_parallel_mode == gw::FrequencyParallelMode::OpenMP;
         settings.execution.frequency_workspace_replicas = frequency_workspace_replicas(settings.execution.frequency_parallel_mode);
 

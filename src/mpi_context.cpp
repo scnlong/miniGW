@@ -39,10 +39,15 @@ void mpi_allreduce_sum_in_place(std::vector<Complex>& values) {
     if (values.empty()) {
         return;
     }
+#ifdef MPI_CXX_DOUBLE_COMPLEX
+    const MPI_Datatype complex_datatype = MPI_CXX_DOUBLE_COMPLEX;
+#else
+    const MPI_Datatype complex_datatype = MPI_C_DOUBLE_COMPLEX;
+#endif
     MPI_Allreduce(MPI_IN_PLACE,
                   values.data(),
                   static_cast<int>(values.size()),
-                  MPI_C_DOUBLE_COMPLEX,
+                  complex_datatype,
                   MPI_SUM,
                   MPI_COMM_WORLD);
 #else
