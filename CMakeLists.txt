@@ -321,7 +321,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		set_tests_properties(
 			blas_lapack_h2o_reference_compute
     	    PROPERTIES
-    	        DEPENDS gw_h2o_reference_run
+    	        DEPENDS blas_lapack_h2o_reference_run
     	)
 
     	set_tests_properties(
@@ -338,4 +338,74 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 
 	endif()
 
+	if(GW_ENABLE_MPI)
+		set(GW_TEST_H2O_MPI_DIR
+    	    ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_mpi
+    	)
+
+    	add_test(
+    	    NAME mpi_h2o_reference_run
+    	    COMMAND
+			${CMAKE_COMMAND} -E make_directory ${GW_TEST_H2O_MPI_DIR}
+    	)
+
+		add_test(
+    	    NAME mpi_h2o_reference_compute
+    	    COMMAND
+		        mpirun -np 4 env
+			    OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1
+			    $<TARGET_FILE:gw>
+				--input-dir ${GW_REFERENCE_H2O_DIR}
+    	        --freq-points 200
+    	        --pade-params 16
+    	        --state 5
+				--output-dir ${GW_TEST_H2O_MPI_DIR}
+			    --frequency-parallel mpi 
+				--linalg-backend blas-lapack
+    	)
+
+		add_test(
+    	  	NAME mpi_h2o_reference_compare
+    	    COMMAND
+    	        ${Python3_EXECUTABLE}
+    	        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+				--reference-file ${GW_REFERENCE_H2O_DIR}/E_c_before_Pade.out
+				--output-file ${GW_TEST_H2O_MPI_DIR}/E_c_before_Pade.out
+    	        --rtol 1e-6
+    	        --atol 1e-6
+    	        --compare-mode components
+    	)
+
+		add_test(
+		    NAME mpi_h2o_energy_summary_compare
+		    COMMAND
+		        ${Python3_EXECUTABLE}
+		        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+		        --comparison energy-summary
+		        --reference-file ${GW_REFERENCE_H2O_DIR}/gw.out
+				--output-file ${GW_TEST_H2O_MPI_DIR}/gw.out
+		        --orbital 5
+		        --rtol 1e-5
+		        --atol 1e-5
+		)
+
+		set_tests_properties(
+			mpi_h2o_reference_compute
+    	    PROPERTIES
+    	        DEPENDS mpi_h2o_reference_run
+    	)
+
+    	set_tests_properties(
+    	    mpi_h2o_reference_compare
+    	    PROPERTIES
+    	        DEPENDS mpi_h2o_reference_compute
+    	)
+
+		set_tests_properties(
+		    mpi_h2o_energy_summary_compare
+		    PROPERTIES
+		        DEPENDS mpi_h2o_reference_compute
+		)
+
+	endif()
 endif()
