@@ -2,6 +2,7 @@
 #include "gw/frequency_grids.hpp"
 #include "gw/mpi_context.hpp"
 #include "gw/pade.hpp"
+#include "gw/workspace/screening_workspace.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -10,6 +11,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
 
 namespace gw {
 namespace {
@@ -72,13 +74,11 @@ void validate_input_shapes(const OrbitalSpace& orbitals, const MolecularIntegral
 void compute_sigma_c_frequency(std::size_t f_n,
                                const OrbitalSpace& orbitals,
                                const ParticleHoleBasis& ph_basis,
-                               const MatrixReal& v_ph,
-                               const MatrixComplex& inv_v,
+                               const workspace::HostScreeningWorkspace& screening,
                                const Tensor3Real& pq_ph,
                                const std::vector<Complex>& omega_im,
                                const std::vector<double>& weights,
                                const std::vector<std::size_t>& states,
-                               const linalg::Backend& linalg_backend,
                                const GwSettings& settings,
                                MatrixComplex& sigma_c_im_points,
                                GwTimings& local_timings) {
@@ -94,7 +94,7 @@ void compute_sigma_c_frequency(std::size_t f_n,
         local_timings.build_pi0_seconds += elapsed_seconds(phase_start, Clock::now());
 
         phase_start = Clock::now();
-        const MatrixComplex w_c_ph = calculate_w_0_c_matrix(v_ph, inv_v, pi0_diag, linalg_backend);
+        const MatrixComplex w_c_ph = screening.compute_w_c(pi0_diag);
         local_timings.invert_epsilon_seconds += elapsed_seconds(phase_start, Clock::now());
 
         phase_start = Clock::now();
@@ -104,7 +104,7 @@ void compute_sigma_c_frequency(std::size_t f_n,
                     pk_vec[ph] = pq_ph(p_idx, k_idx, ph);
                 }
 
-                const Complex w_minus_v = linalg_backend.quadratic_form(pk_vec, w_c_ph);
+                const Complex w_minus_v = screening.backend().quadratic_form(pk_vec, w_c_ph);
 
                 const Complex g0_denominator = omega_n_im + orbitals.fermi_energy() - orbitals.energy(k_idx);
                 const Complex g0_term = g0_denominator /
@@ -122,13 +122,11 @@ void compute_sigma_c_frequency(std::size_t f_n,
 
 void compute_sigma_c_serial_or_mpi(const OrbitalSpace& orbitals,
                                    const ParticleHoleBasis& ph_basis,
-                                   const MatrixReal& v_ph,
-                                   const MatrixComplex& inv_v,
+                                   const workspace::HostScreeningWorkspace& screening,
                                    const Tensor3Real& pq_ph,
                                    const std::vector<Complex>& omega_im,
                                    const std::vector<double>& weights,
                                    const std::vector<std::size_t>& states,
-                                   const linalg::Backend& linalg_backend,
                                    const GwSettings& settings,
                                    MatrixComplex& sigma_c_im_points,
                                    GwTimings& timings) {
@@ -142,13 +140,11 @@ void compute_sigma_c_serial_or_mpi(const OrbitalSpace& orbitals,
         compute_sigma_c_frequency(f_n,
                                   orbitals,
                                   ph_basis,
-                                  v_ph,
-                                  inv_v,
+                                  screening,
                                   pq_ph,
                                   omega_im,
                                   weights,
                                   states,
-                                  linalg_backend,
                                   settings,
                                   sigma_c_im_points,
                                   timings);
@@ -164,13 +160,11 @@ void compute_sigma_c_serial_or_mpi(const OrbitalSpace& orbitals,
 
 void compute_sigma_c_openmp_frequency(const OrbitalSpace& orbitals,
                                       const ParticleHoleBasis& ph_basis,
-                                      const MatrixReal& v_ph,
-                                      const MatrixComplex& inv_v,
+                                      const workspace::HostScreeningWorkspace& screening,
                                       const Tensor3Real& pq_ph,
                                       const std::vector<Complex>& omega_im,
                                       const std::vector<double>& weights,
                                       const std::vector<std::size_t>& states,
-                                      const linalg::Backend& linalg_backend,
                                       const GwSettings& settings,
                                       MatrixComplex& sigma_c_im_points,
                                       GwTimings& timings) {
@@ -183,13 +177,11 @@ void compute_sigma_c_openmp_frequency(const OrbitalSpace& orbitals,
             compute_sigma_c_frequency(f_n,
                                       orbitals,
                                       ph_basis,
-                                      v_ph,
-                                      inv_v,
+                                      screening,
                                       pq_ph,
                                       omega_im,
                                       weights,
                                       states,
-                                      linalg_backend,
                                       settings,
                                       sigma_c_im_points,
                                       local_timings);
@@ -200,13 +192,11 @@ void compute_sigma_c_openmp_frequency(const OrbitalSpace& orbitals,
 #else
     (void)orbitals;
     (void)ph_basis;
-    (void)v_ph;
-    (void)inv_v;
+    (void)screening;
     (void)pq_ph;
     (void)omega_im;
     (void)weights;
     (void)states;
-    (void)linalg_backend;
     (void)settings;
     (void)sigma_c_im_points;
     (void)timings;
@@ -344,6 +334,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     const auto run_start = Clock::now();
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
     g_openmp_kernel_loops_enabled.store(settings.execution.openmp_kernel_loops, std::memory_order_relaxed);
+    workspace::set_host_screening_openmp_kernel_loops(settings.execution.openmp_kernel_loops);
 #endif
 
 	// set up parameters
@@ -403,7 +394,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 
 	// calculate Coulomb on ph-ph space
     start = Clock::now();
-    const MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
+    MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
 
 	// calculate Coulomb on p-p-ph space
     const Tensor3Real pq_ph = calculate_pq_ph_matrix(integrals, ph_basis);
@@ -424,8 +415,10 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     }
 
     start = Clock::now();
-    const MatrixComplex inv_v = linalg_backend.inverse(to_complex(v_ph));
+    MatrixComplex inv_v = linalg_backend.inverse(to_complex(v_ph));
     result.timings.build_inv_v_seconds = elapsed_seconds(start, Clock::now());
+
+    workspace::HostScreeningWorkspace screening(std::move(v_ph), std::move(inv_v), linalg_backend);
 
     result.sigma_c_im_points = MatrixComplex(orbitals.nmo(), settings.num_freq_points_total, Complex{0.0, 0.0});
     const auto states = selected_states(orbitals.nmo(), settings.selected_state_0based);
@@ -436,11 +429,11 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     }
     start = Clock::now();
     if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
-        compute_sigma_c_openmp_frequency(orbitals, ph_basis, v_ph, inv_v, pq_ph, omega_im, weights,
-                                         states, linalg_backend, settings, result.sigma_c_im_points, result.timings);
+        compute_sigma_c_openmp_frequency(orbitals, ph_basis, screening, pq_ph, omega_im, weights,
+                                         states, settings, result.sigma_c_im_points, result.timings);
     } else {
-        compute_sigma_c_serial_or_mpi(orbitals, ph_basis, v_ph, inv_v, pq_ph, omega_im, weights,
-                                      states, linalg_backend, settings, result.sigma_c_im_points, result.timings);
+        compute_sigma_c_serial_or_mpi(orbitals, ph_basis, screening, pq_ph, omega_im, weights,
+                                      states, settings, result.sigma_c_im_points, result.timings);
     }
     result.timings.sigma_c_wall_seconds = elapsed_seconds(start, Clock::now());
 

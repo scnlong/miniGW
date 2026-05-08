@@ -77,3 +77,34 @@ CMake exposes preparation switches for vendor libraries:
 ```
 
 These switches only prepare/link the relevant vendor targets when available. The actual optimized backend classes should be added as separate implementations of `gw::linalg::Backend`.
+
+## Architecture notes
+
+The current code separates four concerns that should remain independent as the project grows:
+
+- **Execution policy** (`include/gw/execution.hpp`, `src/execution.cpp`) decides how frequency points and local kernels are scheduled: serial, OpenMP, or MPI frequency distribution.
+- **Data ownership** (`include/gw/matrix/ownership.hpp`) records whether data are replicated host arrays, future device-resident arrays, or future distributed block-cyclic arrays.
+- **Algorithm workspaces** (`include/gw/workspace/screening_workspace.hpp`, `src/workspace/screening_workspace.cpp`) own high-level GW temporaries such as `V_ph`, `inv(V_ph)`, `epsilon`, and `W_c`. The GW driver asks the workspace to compute `W_c` rather than directly managing all dense matrices.
+- **Specialized backends** are selected by `include/gw/backend_factory.hpp` and `src/backend_factory.cpp`. The current production path is a replicated local-host backend (`reference`, optionally `blas-lapack`). ScaLAPACK, COSMA, and cuBLAS/cuSolver are intentionally kept behind explicit backend boundaries because real implementations require distributed or device-resident matrix ownership rather than the current replicated `MatrixComplex` interface.
+
+Default builds use the reference backend and do not require MPI, OpenMP, or BLAS/LAPACK:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF
+cmake --build build -j
+```
+
+OpenMP kernel loops can be enabled with:
+
+```bash
+cmake -S . -B build-omp -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF -DGW_ENABLE_OPENMP=ON
+cmake --build build-omp -j
+```
+
+MPI frequency distribution requires an MPI C++ toolchain:
+
+```bash
+cmake -S . -B build-mpi -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF -DGW_ENABLE_MPI=ON
+cmake --build build-mpi -j
+mpirun -np 4 ./build-mpi/gw --input-dir <input> --frequency-parallel mpi
+```

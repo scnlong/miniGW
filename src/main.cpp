@@ -1,22 +1,10 @@
+#include "gw/backend_factory.hpp"
 #include "gw/cli.hpp"
 #include "gw/execution.hpp"
 #include "gw/gw.hpp"
 #include "gw/io.hpp"
-#include "gw/linalg.hpp"
 #include "gw/memory_footprint.hpp"
 #include "gw/mpi_context.hpp"
-#ifdef GW_HAS_BLAS_LAPACK_BACKEND
-#include "gw/linalg_blas_lapack.hpp"
-#endif
-#ifdef GW_HAS_SCALAPACK_BACKEND
-#include "gw/linalg_scalapack.hpp"
-#endif
-#ifdef GW_HAS_COSMA_BACKEND
-#include "gw/linalg_cosma.hpp"
-#endif
-#ifdef GW_HAS_CUDA_BACKEND
-#include "gw/linalg_cublas.hpp"
-#endif
 #include "gw/npy.hpp"
 #include "gw/profiling.hpp"
 #include "gw/types.hpp"
@@ -78,37 +66,11 @@ int main(int argc, char** argv) {
                       << input.eri_mo.dim2() << ", " << input.eri_mo.dim3() << ")\n";
         }
 
-		// select linear algebra backend
+		// select specialized backend through a factory.  main() owns policy
+        // assembly only; backend construction and compatibility checks stay
+        // outside the physics driver.
         gw::GwSettings settings;
-        if (cli.linalg_backend == "reference") {
-            settings.linalg_backend = gw::linalg::make_reference_backend();
-        } else if (cli.linalg_backend == "blas-lapack") {
-#ifdef GW_HAS_BLAS_LAPACK_BACKEND
-            settings.linalg_backend = gw::linalg::make_blas_lapack_backend();
-#else
-            throw std::runtime_error("This executable was built without the BLAS/LAPACK backend. Reconfigure with -DGW_ENABLE_BLAS_LAPACK=ON, or use --linalg-backend reference.");
-#endif
-        } else if (cli.linalg_backend == "scalapack") {
-#ifdef GW_HAS_SCALAPACK_BACKEND
-            settings.linalg_backend = gw::linalg::make_scalapack_backend();
-#else
-            throw std::runtime_error("This executable was built without the ScaLAPACK backend interface. Reconfigure with -DGW_ENABLE_SCALAPACK=ON.");
-#endif
-        } else if (cli.linalg_backend == "cosma") {
-#ifdef GW_HAS_COSMA_BACKEND
-            settings.linalg_backend = gw::linalg::make_cosma_backend();
-#else
-            throw std::runtime_error("This executable was built without the COSMA backend interface. Reconfigure with -DGW_ENABLE_COSMA=ON.");
-#endif
-        } else if (cli.linalg_backend == "cublas") {
-#ifdef GW_HAS_CUDA_BACKEND
-            settings.linalg_backend = gw::linalg::make_cublas_backend();
-#else
-            throw std::runtime_error("This executable was built without the cuBLAS/cuSolver backend interface. Reconfigure with -DGW_ENABLE_CUDA=ON.");
-#endif
-        } else {
-            throw std::runtime_error("Unknown --linalg-backend value: " + cli.linalg_backend + ". Supported values: reference, blas-lapack, scalapack, cosma, cublas.");
-        }
+        settings.linalg_backend = gw::make_local_linalg_backend(cli);
 
 		// setup parameters
         settings.num_freq_points_total = cli.freq_points;
@@ -129,6 +91,7 @@ int main(int argc, char** argv) {
         settings.execution.openmp_kernel_loops = gw::choose_openmp_kernel_loops(cli, settings.execution.frequency_parallel_mode);
         settings.execution.openmp_frequency_parallel = settings.execution.frequency_parallel_mode == gw::FrequencyParallelMode::OpenMP;
         settings.execution.frequency_workspace_replicas = gw::frequency_workspace_replicas(settings.execution.frequency_parallel_mode);
+        gw::validate_backend_for_execution(*settings.linalg_backend, settings.execution);
 
 		// estimate memory usage
         if (cli.print_memory_footprint && mpi.root()) {

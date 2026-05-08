@@ -56,7 +56,7 @@ std::string_view BlasLapackBackend::name() const noexcept {
 }
 
 BackendCapabilities BlasLapackBackend::capabilities() const noexcept {
-    return BackendCapabilities{.thread_safe = true, .uses_internal_threads = true, .distributed_mpi = false, .uses_device_memory = false};
+    return BackendCapabilities{.family = BackendFamily::LocalHost, .thread_safe = true, .uses_internal_threads = true, .distributed_mpi = false, .uses_device_memory = false};
 }
 
 MatrixComplex BlasLapackBackend::inverse(MatrixComplex a) const {

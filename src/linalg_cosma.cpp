@@ -11,7 +11,7 @@ namespace {
 
 std::string_view CosmaBackend::name() const noexcept { return "cosma-placeholder"; }
 BackendCapabilities CosmaBackend::capabilities() const noexcept {
-    return BackendCapabilities{.thread_safe = true, .uses_internal_threads = false, .distributed_mpi = true, .uses_device_memory = false};
+    return BackendCapabilities{.family = BackendFamily::DistributedHost, .thread_safe = true, .uses_internal_threads = false, .distributed_mpi = true, .uses_device_memory = false};
 }
 MatrixComplex CosmaBackend::inverse(MatrixComplex) const { not_implemented(); }
 MatrixComplex CosmaBackend::gemm(const MatrixComplex&, const MatrixComplex&, MatrixTranspose, MatrixTranspose) const { not_implemented(); }

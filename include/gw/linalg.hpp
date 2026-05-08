@@ -14,7 +14,14 @@ enum class MatrixTranspose {
     ConjugateTranspose
 };
 
+enum class BackendFamily {
+    LocalHost,
+    DistributedHost,
+    Device
+};
+
 struct BackendCapabilities {
+    BackendFamily family{BackendFamily::LocalHost};
     bool thread_safe{true};
     bool uses_internal_threads{false};
     bool distributed_mpi{false};

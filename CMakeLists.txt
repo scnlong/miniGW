@@ -17,6 +17,7 @@ option(GW_ENABLE_COSMA "Build/link a COSMA backend interface placeholder" OFF)
 option(GW_ENABLE_CUDA "Build/link a cuBLAS/cuSolver backend interface placeholder" OFF)
 
 add_library(gwcore
+    src/backend_factory.cpp
     src/cli.cpp
     src/execution.cpp
     src/frequency_grids.cpp
@@ -28,6 +29,7 @@ add_library(gwcore
     src/mpi_context.cpp
     src/memory_footprint.cpp
     src/profiling.cpp
+    src/workspace/screening_workspace.cpp
 )
 
 target_include_directories(gwcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

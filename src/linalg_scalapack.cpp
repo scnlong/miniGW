@@ -11,7 +11,7 @@ namespace {
 
 std::string_view ScalapackBackend::name() const noexcept { return "scalapack-placeholder"; }
 BackendCapabilities ScalapackBackend::capabilities() const noexcept {
-    return BackendCapabilities{.thread_safe = true, .uses_internal_threads = false, .distributed_mpi = true, .uses_device_memory = false};
+    return BackendCapabilities{.family = BackendFamily::DistributedHost, .thread_safe = true, .uses_internal_threads = false, .distributed_mpi = true, .uses_device_memory = false};
 }
 MatrixComplex ScalapackBackend::inverse(MatrixComplex) const { not_implemented(); }
 MatrixComplex ScalapackBackend::gemm(const MatrixComplex&, const MatrixComplex&, MatrixTranspose, MatrixTranspose) const { not_implemented(); }

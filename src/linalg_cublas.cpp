@@ -11,7 +11,7 @@ namespace {
 
 std::string_view CublasBackend::name() const noexcept { return "cublas-placeholder"; }
 BackendCapabilities CublasBackend::capabilities() const noexcept {
-    return BackendCapabilities{.thread_safe = false, .uses_internal_threads = false, .distributed_mpi = false, .uses_device_memory = true};
+    return BackendCapabilities{.family = BackendFamily::Device, .thread_safe = false, .uses_internal_threads = false, .distributed_mpi = false, .uses_device_memory = true};
 }
 MatrixComplex CublasBackend::inverse(MatrixComplex) const { not_implemented(); }
 MatrixComplex CublasBackend::gemm(const MatrixComplex&, const MatrixComplex&, MatrixTranspose, MatrixTranspose) const { not_implemented(); }
