@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
         settings.num_freq_points_total = cli.freq_points;
         settings.num_pade_params = cli.pade_params;
         settings.eta = cli.eta;
+        settings.contraction_panel_size = cli.contraction_panel_size;
         if (cli.selected_state_1based.has_value()) {
             if (*cli.selected_state_1based == 0) {
                 throw std::runtime_error("--state must be 1-based and positive");
@@ -91,6 +92,7 @@ int main(int argc, char** argv) {
         settings.execution.openmp_kernel_loops = gw::choose_openmp_kernel_loops(cli, settings.execution.frequency_parallel_mode);
         settings.execution.openmp_frequency_parallel = settings.execution.frequency_parallel_mode == gw::FrequencyParallelMode::OpenMP;
         settings.execution.frequency_workspace_replicas = gw::frequency_workspace_replicas(settings.execution.frequency_parallel_mode);
+        gw::configure_scalapack_frequency_groups(settings.execution, cli);
         gw::validate_backend_for_execution(*settings.linalg_backend, settings.execution);
 
 		// estimate memory usage

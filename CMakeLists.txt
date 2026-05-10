@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.21)
 project(miniGW LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -12,9 +12,10 @@ option(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL "Enable experimental OpenMP paralleli
 option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
-option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK backend interface placeholder" OFF)
-option(GW_ENABLE_COSMA "Build/link a COSMA backend interface placeholder" OFF)
-option(GW_ENABLE_CUDA "Build/link a cuBLAS/cuSolver backend interface placeholder" OFF)
+option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
+option(GW_ENABLE_COSMA "Build/link a COSMA GEMM facade with ScaLAPACK solve backend" OFF)
+option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" OFF)
+option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" OFF)
 
 add_library(gwcore
     src/backend_factory.cpp
@@ -30,6 +31,7 @@ add_library(gwcore
     src/memory_footprint.cpp
     src/profiling.cpp
     src/workspace/screening_workspace.cpp
+    src/workspace/pq_ph_panel.cpp
 )
 
 target_include_directories(gwcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -110,29 +112,75 @@ if(GW_ENABLE_BLAS_LAPACK)
 endif()
 
 if(GW_ENABLE_SCALAPACK)
-    add_library(gw_linalg_scalapack src/linalg_scalapack.cpp)
+    set(SCALAPACK_LIBRARIES "" CACHE STRING "ScaLAPACK/BLACS libraries; leave empty to search for a library named scalapack")
+    if(SCALAPACK_LIBRARIES STREQUAL "")
+        find_library(SCALAPACK_LIBRARY NAMES scalapack scalapack-openmpi scalapack-mpich REQUIRED)
+        set(SCALAPACK_LIBRARIES ${SCALAPACK_LIBRARY})
+    endif()
+
+    add_library(gw_linalg_scalapack
+        src/linalg_scalapack.cpp
+        src/matrix/distributed_matrix.cpp
+        src/workspace/distributed_screening_workspace.cpp
+    )
     target_include_directories(gw_linalg_scalapack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_scalapack PUBLIC MPI::MPI_CXX)
-    target_compile_definitions(gw_linalg_scalapack PUBLIC GW_HAS_SCALAPACK_BACKEND=1)
+    target_link_libraries(gw_linalg_scalapack PUBLIC MPI::MPI_CXX ${SCALAPACK_LIBRARIES})
+    target_compile_definitions(gw_linalg_scalapack PUBLIC GW_HAS_SCALAPACK_BACKEND=1 GW_ENABLE_MPI=1)
+    target_compile_definitions(gwcore PUBLIC GW_HAS_SCALAPACK_BACKEND=1)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
 endif()
 
 if(GW_ENABLE_COSMA)
+    if(NOT GW_ENABLE_SCALAPACK)
+        message(FATAL_ERROR "GW_ENABLE_COSMA currently requires GW_ENABLE_SCALAPACK=ON because solve/factorization is delegated to ScaLAPACK.")
+    endif()
     add_library(gw_linalg_cosma src/linalg_cosma.cpp)
     target_include_directories(gw_linalg_cosma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_cosma PUBLIC MPI::MPI_CXX)
-    target_compile_definitions(gw_linalg_cosma PUBLIC GW_HAS_COSMA_BACKEND=1)
+    target_link_libraries(gw_linalg_cosma PUBLIC gw_linalg_scalapack MPI::MPI_CXX)
+    target_compile_definitions(gw_linalg_cosma PUBLIC GW_HAS_COSMA_BACKEND=1 GW_ENABLE_MPI=1)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cosma)
 endif()
 
 if(GW_ENABLE_CUDA)
     enable_language(CUDA)
     find_package(CUDAToolkit REQUIRED)
-    add_library(gw_linalg_cublas src/linalg_cublas.cpp)
+    add_library(gw_linalg_cublas
+        src/linalg_cublas.cu
+        src/workspace/device_screening_workspace.cu
+        src/workspace/device_pq_ph_panel.cu
+    )
     target_include_directories(gw_linalg_cublas PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_cublas PUBLIC CUDA::cublas CUDA::cusolver)
+    target_link_libraries(gw_linalg_cublas PUBLIC CUDA::cublas CUDA::cusolver CUDA::cudart)
+    target_compile_features(gw_linalg_cublas PUBLIC cxx_std_20)
+    set_target_properties(gw_linalg_cublas PROPERTIES CUDA_STANDARD 17 CUDA_STANDARD_REQUIRED ON)
     target_compile_definitions(gw_linalg_cublas PUBLIC GW_HAS_CUDA_BACKEND=1)
+    target_compile_definitions(gwcore PUBLIC GW_HAS_CUDA_BACKEND=1)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cublas)
+endif()
+
+
+if(GW_ENABLE_HIP)
+    enable_language(HIP)
+    find_package(hip REQUIRED)
+    find_package(hipblas REQUIRED)
+    find_package(hipsolver REQUIRED)
+    add_library(gw_linalg_hip
+        src/linalg_hip.cpp
+        src/workspace/hip_screening_workspace.cpp
+        src/workspace/hip_pq_ph_panel.cpp
+    )
+    target_include_directories(gw_linalg_hip PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(gw_linalg_hip PUBLIC hip::host hipblas hipsolver)
+    target_compile_features(gw_linalg_hip PUBLIC cxx_std_20)
+    set_source_files_properties(
+        src/linalg_hip.cpp
+        src/workspace/hip_screening_workspace.cpp
+        src/workspace/hip_pq_ph_panel.cpp
+        PROPERTIES LANGUAGE HIP
+    )
+    target_compile_definitions(gw_linalg_hip PUBLIC GW_HAS_HIP_BACKEND=1)
+    target_compile_definitions(gwcore PUBLIC GW_HAS_HIP_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_hip)
 endif()
 
 target_link_libraries(gwcore PUBLIC gw_linalg_backends)

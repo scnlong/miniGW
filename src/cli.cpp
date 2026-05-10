@@ -17,9 +17,11 @@ void print_usage(const char* exe) {
               << "  --state N                    1-based orbital index to calculate [default: 5]\n"
               << "  --all-states                 Calculate all diagonal states\n"
               << "  --eta VALUE                  Infinitesimal broadening [default: 0.0]\n"
-              << "  --linalg-backend NAME        reference, blas-lapack, scalapack, cosma, or cublas [default: blas-lapack]\n"
+              << "  --linalg-backend NAME        reference, blas-lapack, scalapack, cosma, cublas, or hipblas [default: blas-lapack]\n"
               << "  --frequency-parallel MODE    auto, serial, mpi, or openmp [default: auto]\n"
               << "  --kernel-parallel MODE       auto, serial, or openmp for local kernel loops [default: auto]\n"
+              << "  --contraction-panel-size N   Number of (p,k) vectors batched in Sigma_c contraction [default: 32]\n"
+              << "  --scalapack-ranks-per-group N  MPI ranks per ScaLAPACK communicator group for frequency batching [default: 4]\n"
               << "  --print-memory-footprint     Print an algorithmic memory estimate before running GW\n"
               << "  --output-dir PATH            Directory containing E_c_before_Pade.out, E_c.out, and gw.out\n"
               << "  --help                       Show this message\n";
@@ -55,6 +57,10 @@ Cli parse_cli(int argc, char** argv) {
             cli.frequency_parallel = require_value(arg);
         } else if (arg == "--kernel-parallel") {
             cli.kernel_parallel = require_value(arg);
+        } else if (arg == "--contraction-panel-size") {
+            cli.contraction_panel_size = static_cast<std::size_t>(std::stoull(require_value(arg)));
+        } else if (arg == "--scalapack-ranks-per-group") {
+            cli.scalapack_ranks_per_group = static_cast<std::size_t>(std::stoull(require_value(arg)));
         } else if (arg == "--print-memory-footprint") {
             cli.print_memory_footprint = true;
         } else if (arg == "--output-dir") {
@@ -73,6 +79,12 @@ Cli parse_cli(int argc, char** argv) {
     }
     if (cli.pade_params == 0) {
         throw std::runtime_error("--pade-params must be positive");
+    }
+    if (cli.contraction_panel_size == 0) {
+        throw std::runtime_error("--contraction-panel-size must be positive");
+    }
+    if (cli.scalapack_ranks_per_group == 0) {
+        throw std::runtime_error("--scalapack-ranks-per-group must be positive");
     }
     if (cli.frequency_parallel != "auto" && cli.frequency_parallel != "serial" &&
         cli.frequency_parallel != "mpi" && cli.frequency_parallel != "openmp") {

@@ -73,4 +73,40 @@ MatrixComplex HostScreeningWorkspace::compute_w_c(const std::vector<Complex>& pi
     return backend_.gemm(inv_eps, inv_v_, linalg::MatrixTranspose::Transpose, linalg::MatrixTranspose::NoTranspose);
 }
 
+
+std::vector<Complex> HostScreeningWorkspace::quadratic_forms_panel(const MatrixComplex& w_c,
+                                                                   const MatrixReal& x_panel) const {
+    const std::size_t n = v_ph_.rows();
+    if (w_c.rows() != n || w_c.cols() != n || x_panel.rows() != n) {
+        throw std::runtime_error("HostScreeningWorkspace::quadratic_forms_panel: inconsistent dimensions");
+    }
+
+    const std::size_t nvec = x_panel.cols();
+    MatrixComplex x_complex(n, nvec, Complex{0.0, 0.0});
+#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
+#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#endif
+    for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j < nvec; ++j) {
+            x_complex(i, j) = Complex{x_panel(i, j), 0.0};
+        }
+    }
+
+    const MatrixComplex y = backend_.gemm(w_c, x_complex,
+                                          linalg::MatrixTranspose::NoTranspose,
+                                          linalg::MatrixTranspose::NoTranspose);
+    std::vector<Complex> values(nvec, Complex{0.0, 0.0});
+#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
+#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#endif
+    for (std::size_t j = 0; j < nvec; ++j) {
+        Complex sum{0.0, 0.0};
+        for (std::size_t i = 0; i < n; ++i) {
+            sum += x_panel(i, j) * y(i, j);
+        }
+        values[j] = sum;
+    }
+    return values;
+}
+
 } // namespace gw::workspace

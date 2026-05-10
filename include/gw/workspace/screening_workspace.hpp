@@ -21,6 +21,13 @@ public:
 
     [[nodiscard]] MatrixComplex compute_w_c(const std::vector<Complex>& pi0_diag) const;
 
+    // Evaluate x_j^T W_c x_j for a panel of vectors.  x_panel has shape
+    // n_ph x nvec with each column one pk vector.  The local implementation
+    // computes Y = W_c * X with the selected backend GEMM and then contracts
+    // column-wise.
+    [[nodiscard]] std::vector<Complex> quadratic_forms_panel(const MatrixComplex& w_c,
+                                                             const MatrixReal& x_panel) const;
+
 private:
     MatrixReal v_ph_;
     MatrixComplex inv_v_;

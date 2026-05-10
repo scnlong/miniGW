@@ -21,11 +21,22 @@ struct ExecutionPolicy {
     std::size_t mpi_rank{0};
     std::size_t mpi_size{1};
     std::size_t frequency_workspace_replicas{1};
+
+    // ScaLAPACK/COSMA can use two levels of MPI parallelism:
+    //   - frequency groups: independent communicator groups process different frequency points;
+    //   - ranks within each group: collectively execute BLACS/ScaLAPACK operations.
+    // For non-distributed backends these fields are informational and unused.
+    std::size_t scalapack_ranks_per_group{4};
+    std::size_t frequency_group_id{0};
+    std::size_t num_frequency_groups{1};
+    std::size_t frequency_group_rank{0};
+    std::size_t frequency_group_size{1};
 };
 
 [[nodiscard]] std::string_view to_string(FrequencyParallelMode mode) noexcept;
 [[nodiscard]] FrequencyParallelMode choose_frequency_parallel_mode(const Cli& cli, const MpiContext& mpi);
 [[nodiscard]] std::size_t frequency_workspace_replicas(FrequencyParallelMode mode);
 [[nodiscard]] bool choose_openmp_kernel_loops(const Cli& cli, FrequencyParallelMode frequency_mode);
+void configure_scalapack_frequency_groups(ExecutionPolicy& policy, const Cli& cli);
 
 } // namespace gw

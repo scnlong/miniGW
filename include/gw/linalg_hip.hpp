@@ -6,14 +6,14 @@
 
 namespace gw::linalg {
 
-// Single-rank CUDA backend using cuBLAS/cuSolver.
+// Single-rank HIP/ROCm backend using hipBLAS/hipSOLVER.
 //
 // This is an interface-compatible host wrapper: inputs and outputs are still
 // replicated MatrixComplex objects.  The backend copies matrices to the GPU,
-// calls cuBLAS/cuSolver, and copies results back.  It is a real CUDA call path
+// calls hipBLAS/hipSOLVER, and copies results back.  It is a real HIP/ROCm call path
 // intended for correctness and incremental integration.  A high-performance GW
 // path should keep V_ph/epsilon/workspaces device-resident across frequencies.
-class CublasBackend final : public Backend {
+class HipBackend final : public Backend {
 public:
     [[nodiscard]] std::string_view name() const noexcept override;
     [[nodiscard]] BackendCapabilities capabilities() const noexcept override;
@@ -33,6 +33,6 @@ public:
                                          const MatrixComplex& a) const override;
 };
 
-[[nodiscard]] std::shared_ptr<const Backend> make_cublas_backend();
+[[nodiscard]] std::shared_ptr<const Backend> make_hip_backend();
 
 } // namespace gw::linalg

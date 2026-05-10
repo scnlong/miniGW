@@ -27,6 +27,13 @@ struct GwSettings {
     std::optional<std::size_t> selected_state_0based{4}; // Default cal_states = 5.
     double eta{0.0};
 
+    // Number of (p,k) vectors grouped into one panel for the self-energy
+    // contraction.  The local path evaluates W_c * P with GEMM, where
+    // P contains several pk vectors as columns.  The ScaLAPACK path performs
+    // the same contraction over distributed W_c blocks and reduces one panel
+    // of scalar results at a time.
+    std::size_t contraction_panel_size{32};
+
     ExecutionPolicy execution{};
 
     // The default backend is a serial reference implementation. Optimized

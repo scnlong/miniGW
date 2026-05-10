@@ -33,6 +33,7 @@ struct MemoryFootprint {
     long double sigma_x_bytes{};
     long double v_ph_matrix_bytes{};
     long double pq_ph_tensor_bytes{};
+    long double avoided_materialized_pq_ph_bytes{};
     long double sigma_c_bytes{};
     long double qp_energy_bytes{};
     long double frequency_grid_bytes{};
@@ -41,6 +42,7 @@ struct MemoryFootprint {
     long double inv_v_bytes{};
     long double pi0_diag_bytes{};
     long double pk_vec_bytes{};
+    long double pk_panel_bytes{};
     long double current_sigma_bytes{};
     long double quadratic_form_workspace_bytes{};
 
@@ -50,6 +52,23 @@ struct MemoryFootprint {
     long double w_c_matrix_bytes{};
     long double w_c_construction_peak_bytes{};
 
+    // Device-resident GPU screening estimate.  These fields are nonzero when
+    // the selected backend advertises device memory.  They estimate GPU memory,
+    // not host RAM.
+    long double device_v_ph_bytes{};
+    long double device_inv_v_bytes{};
+    long double device_epsilon_bytes{};
+    long double device_inv_eps_bytes{};
+    long double device_w_c_bytes{};
+    long double device_pi0_bytes{};
+    long double device_solver_workspace_bytes{};
+    long double device_panel_workspace_bytes{};
+    long double device_eri_bytes{};
+    long double device_ph_index_bytes{};
+    long double device_pq_panel_bytes{};
+    long double device_pq_panel_pinned_host_bytes{};
+    long double device_eri_streaming_saved_bytes{};
+
     [[nodiscard]] long double input_bytes() const;
     [[nodiscard]] long double runtime_copy_bytes() const;
     [[nodiscard]] long double persistent_runtime_bytes_per_rank() const;
@@ -57,6 +76,7 @@ struct MemoryFootprint {
     [[nodiscard]] long double replicated_workspace_bytes_per_rank() const;
     [[nodiscard]] long double peak_bytes_per_rank() const;
     [[nodiscard]] long double aggregate_peak_bytes_all_ranks() const;
+    [[nodiscard]] long double estimated_device_bytes_per_rank() const;
 };
 
 [[nodiscard]] MemoryFootprint estimate_memory_footprint(const GwInput& input,

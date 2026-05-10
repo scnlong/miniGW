@@ -3,6 +3,7 @@
 #include "gw/cli.hpp"
 #include "gw/mpi_context.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 #ifdef _OPENMP
@@ -25,9 +26,13 @@ std::string_view to_string(FrequencyParallelMode mode) noexcept {
 
 FrequencyParallelMode choose_frequency_parallel_mode(const Cli& cli, const MpiContext& mpi) {
     if (cli.frequency_parallel == "serial") {
-        if (mpi.size() > 1) {
-            throw std::runtime_error("--frequency-parallel serial must not be launched with multiple MPI ranks; run without mpirun or use --frequency-parallel mpi");
-        }
+        // Serial frequency mode means that all ranks, if any, execute the same
+        // frequency loop collectively.  This is required by distributed dense
+        // linear algebra backends such as ScaLAPACK/COSMA, where all MPI ranks
+        // must enter the same BLACS/ScaLAPACK collectives in the same order.
+        // Whether multi-rank serial mode is legal depends on the selected
+        // backend and is checked in validate_backend_for_execution().
+        (void)mpi;
         return FrequencyParallelMode::Serial;
     }
     if (cli.frequency_parallel == "mpi") {
@@ -95,6 +100,40 @@ bool choose_openmp_kernel_loops(const Cli& cli, FrequencyParallelMode frequency_
 #else
     return false;
 #endif
+}
+
+void configure_scalapack_frequency_groups(ExecutionPolicy& policy, const Cli& cli) {
+    policy.scalapack_ranks_per_group = std::max<std::size_t>(1, cli.scalapack_ranks_per_group);
+
+    if (policy.mpi_size <= 1) {
+        policy.frequency_group_id = 0;
+        policy.num_frequency_groups = 1;
+        policy.frequency_group_rank = 0;
+        policy.frequency_group_size = 1;
+        policy.scalapack_ranks_per_group = 1;
+        return;
+    }
+
+    if (policy.frequency_parallel_mode == FrequencyParallelMode::MPI) {
+        const std::size_t ranks_per_group = std::min(policy.scalapack_ranks_per_group, policy.mpi_size);
+        policy.scalapack_ranks_per_group = ranks_per_group;
+        policy.num_frequency_groups = (policy.mpi_size + ranks_per_group - 1U) / ranks_per_group;
+        policy.frequency_group_id = policy.mpi_rank / ranks_per_group;
+        policy.frequency_group_rank = policy.mpi_rank % ranks_per_group;
+        const std::size_t group_begin = policy.frequency_group_id * ranks_per_group;
+        const std::size_t group_end = std::min(group_begin + ranks_per_group, policy.mpi_size);
+        policy.frequency_group_size = group_end - group_begin;
+        return;
+    }
+
+    // Serial frequency mode with a distributed backend means all ranks cooperate
+    // on the same frequency point.  Therefore all ranks must be in a single
+    // ScaLAPACK communicator group, irrespective of the CLI default.
+    policy.frequency_group_id = 0;
+    policy.num_frequency_groups = 1;
+    policy.frequency_group_rank = policy.mpi_rank;
+    policy.frequency_group_size = policy.mpi_size;
+    policy.scalapack_ranks_per_group = policy.mpi_size;
 }
 
 } // namespace gw

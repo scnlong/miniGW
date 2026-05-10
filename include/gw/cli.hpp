@@ -17,6 +17,8 @@ struct Cli {
     std::string frequency_parallel{"auto"};
     std::string kernel_parallel{"auto"};
     bool print_memory_footprint{true};
+    std::size_t contraction_panel_size{32};
+    std::size_t scalapack_ranks_per_group{4};
 };
 
 Cli parse_cli(int argc, char** argv);
