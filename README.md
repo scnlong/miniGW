@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo/miniGW-logo.png" alt="miniGW logo" width="520">
+</p>
+
 # miniGW
 
 A compact molecular G0W0 code written in modern C++20, using PySCF as the DFT starting point.
