@@ -20,6 +20,8 @@ struct ExecutionPolicy {
     bool openmp_frequency_parallel{false};
     std::size_t mpi_rank{0};
     std::size_t mpi_size{1};
+    std::size_t mpi_local_rank{0};
+    std::size_t mpi_local_size{1};
     std::size_t frequency_workspace_replicas{1};
 
     // ScaLAPACK/COSMA can use two levels of MPI parallelism:
@@ -31,6 +33,13 @@ struct ExecutionPolicy {
     std::size_t num_frequency_groups{1};
     std::size_t frequency_group_rank{0};
     std::size_t frequency_group_size{1};
+
+    // GPU device sharing policy for replicated MPI frequency parallelism.
+    // Device id is chosen as (mpi_local_rank / tasks_per_gpu) % visible_device_count.
+    // CUDA and HIP/ROCm backends both use this policy.
+    std::size_t tasks_per_gpu{4};
+    int cuda_device_id{-1};
+    int hip_device_id{-1};
 };
 
 [[nodiscard]] std::string_view to_string(FrequencyParallelMode mode) noexcept;

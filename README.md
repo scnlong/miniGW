@@ -283,17 +283,32 @@ C++ API, replace the marked branch in `src/matrix/distributed_matrix.cpp` with
 the corresponding COSMA multiply call.  ScaLAPACK remains responsible for
 factorization/solve.
 
-## CUDA device-resident screening path
+## CUDA/HIP device-resident screening path
 
-When configured with `-DGW_ENABLE_CUDA=ON` and run with `--linalg-backend cublas`, miniGW now uses a dedicated `DeviceScreeningWorkspace` for the screening part of the GW calculation.  This is different from the lower-level `CublasBackend` host wrapper: `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, the cuSolver LU workspace, and contraction panel buffers are allocated once and reused on the GPU.
+When configured with `-DGW_ENABLE_CUDA=ON` and run with `--linalg-backend cublas`, miniGW uses a dedicated `DeviceScreeningWorkspace` for the screening part of the GW calculation.  When configured with `-DGW_ENABLE_HIP=ON` and run with `--linalg-backend hipblas`, the analogous HIP/ROCm path uses `HipScreeningWorkspace`.  This is different from the lower-level host-wrapper backends: `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, the solver LU workspace, and contraction panel buffers are allocated once and reused on the GPU.
 
-The current CUDA path is still single-rank and requires:
+Serial frequency execution is supported for single-rank runs:
 
 ```bash
 ./gw --linalg-backend cublas --frequency-parallel serial
+./gw --linalg-backend hipblas --frequency-parallel serial
 ```
 
-The input ERI tensor is still replicated in host memory.  The CUDA path no longer materializes a full `pq_ph` tensor; contraction panels are supplied by `DevicePqPhPanelView`, which either assembles them from a full device ERI copy or streams them through pinned host staging when the full ERI would be too large for the GPU.
+MPI frequency distribution is supported for both CUDA and HIP/ROCm device-resident paths.  Use `--tasks-per-gpu N` to control how many MPI ranks on the same node share one visible GPU device; the default is 4.  The mapping is local-rank based: `device = (local_rank / tasks_per_gpu) % visible_device_count`.
+
+CUDA example:
+
+```bash
+mpirun -np 8 ./gw --linalg-backend cublas --frequency-parallel mpi --tasks-per-gpu 4
+```
+
+HIP/ROCm example:
+
+```bash
+mpirun -np 8 ./gw --linalg-backend hipblas --frequency-parallel mpi --tasks-per-gpu 4
+```
+
+The input ERI tensor is still replicated in host memory.  The CUDA and HIP/ROCm paths no longer materialize a full `pq_ph` tensor; contraction panels are supplied by the corresponding device panel view, which either assembles them from a full device ERI copy or streams them through pinned host staging when the full ERI would be too large for the GPU.
 
 ### CUDA pq-panel source: resident ERI or streaming panels
 

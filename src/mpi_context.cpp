@@ -18,6 +18,14 @@ MpiContext::MpiContext(int& argc, char**& argv) {
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &rank_);
     MPI_Comm_size(MPI_COMM_WORLD, &size_);
+
+    MPI_Comm local_comm = MPI_COMM_NULL;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank_, MPI_INFO_NULL, &local_comm);
+    if (local_comm != MPI_COMM_NULL) {
+        MPI_Comm_rank(local_comm, &local_rank_);
+        MPI_Comm_size(local_comm, &local_size_);
+        MPI_Comm_free(&local_comm);
+    }
 #else
     (void)argc;
     (void)argv;

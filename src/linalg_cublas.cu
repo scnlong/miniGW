@@ -383,6 +383,30 @@ Complex CublasBackend::quadratic_form(const std::vector<double>& x, const Matrix
     return value;
 }
 
+
+int cuda_device_count() {
+    int count = 0;
+    check_cuda(cudaGetDeviceCount(&count), "cudaGetDeviceCount");
+    if (count <= 0) {
+        throw std::runtime_error("No CUDA devices are visible to this process");
+    }
+    return count;
+}
+
+int select_cuda_device_for_local_rank(std::size_t mpi_local_rank, std::size_t tasks_per_gpu) {
+    if (tasks_per_gpu == 0) {
+        throw std::runtime_error("--tasks-per-gpu must be positive");
+    }
+    const int count = cuda_device_count();
+    return static_cast<int>((mpi_local_rank / tasks_per_gpu) % static_cast<std::size_t>(count));
+}
+
+int set_cuda_device_for_local_rank(std::size_t mpi_local_rank, std::size_t tasks_per_gpu) {
+    const int device = select_cuda_device_for_local_rank(mpi_local_rank, tasks_per_gpu);
+    check_cuda(cudaSetDevice(device), "cudaSetDevice");
+    return device;
+}
+
 std::shared_ptr<const Backend> make_cublas_backend() {
     static const std::shared_ptr<const Backend> backend = std::make_shared<CublasBackend>();
     return backend;

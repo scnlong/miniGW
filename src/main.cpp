@@ -89,6 +89,9 @@ int main(int argc, char** argv) {
         settings.execution.frequency_parallel_mode = gw::choose_frequency_parallel_mode(cli, mpi);
         settings.execution.mpi_rank = static_cast<std::size_t>(mpi.rank());
         settings.execution.mpi_size = static_cast<std::size_t>(mpi.size());
+        settings.execution.mpi_local_rank = static_cast<std::size_t>(mpi.local_rank());
+        settings.execution.mpi_local_size = static_cast<std::size_t>(mpi.local_size());
+        settings.execution.tasks_per_gpu = cli.tasks_per_gpu;
         settings.execution.openmp_kernel_loops = gw::choose_openmp_kernel_loops(cli, settings.execution.frequency_parallel_mode);
         settings.execution.openmp_frequency_parallel = settings.execution.frequency_parallel_mode == gw::FrequencyParallelMode::OpenMP;
         settings.execution.frequency_workspace_replicas = gw::frequency_workspace_replicas(settings.execution.frequency_parallel_mode);

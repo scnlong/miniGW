@@ -22,6 +22,7 @@ void print_usage(const char* exe) {
               << "  --kernel-parallel MODE       auto, serial, or openmp for local kernel loops [default: auto]\n"
               << "  --contraction-panel-size N   Number of (p,k) vectors batched in Sigma_c contraction [default: 32]\n"
               << "  --scalapack-ranks-per-group N  MPI ranks per ScaLAPACK communicator group for frequency batching [default: 4]\n"
+              << "  --tasks-per-gpu N           MPI ranks sharing one GPU for CUDA/HIP device backends [default: 4]\n"
               << "  --print-memory-footprint     Print an algorithmic memory estimate before running GW\n"
               << "  --output-dir PATH            Directory containing E_c_before_Pade.out, E_c.out, and gw.out\n"
               << "  --help                       Show this message\n";
@@ -61,6 +62,8 @@ Cli parse_cli(int argc, char** argv) {
             cli.contraction_panel_size = static_cast<std::size_t>(std::stoull(require_value(arg)));
         } else if (arg == "--scalapack-ranks-per-group") {
             cli.scalapack_ranks_per_group = static_cast<std::size_t>(std::stoull(require_value(arg)));
+        } else if (arg == "--tasks-per-gpu") {
+            cli.tasks_per_gpu = static_cast<std::size_t>(std::stoull(require_value(arg)));
         } else if (arg == "--print-memory-footprint") {
             cli.print_memory_footprint = true;
         } else if (arg == "--output-dir") {
@@ -85,6 +88,9 @@ Cli parse_cli(int argc, char** argv) {
     }
     if (cli.scalapack_ranks_per_group == 0) {
         throw std::runtime_error("--scalapack-ranks-per-group must be positive");
+    }
+    if (cli.tasks_per_gpu == 0) {
+        throw std::runtime_error("--tasks-per-gpu must be positive");
     }
     if (cli.frequency_parallel != "auto" && cli.frequency_parallel != "serial" &&
         cli.frequency_parallel != "mpi" && cli.frequency_parallel != "openmp") {

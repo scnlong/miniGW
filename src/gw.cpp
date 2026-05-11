@@ -5,10 +5,12 @@
 #include "gw/workspace/screening_workspace.hpp"
 #include "gw/workspace/pq_ph_panel.hpp"
 #ifdef GW_HAS_CUDA_BACKEND
+#include "gw/linalg_cublas.hpp"
 #include "gw/workspace/device_screening_workspace.hpp"
 #include "gw/workspace/device_pq_ph_panel.hpp"
 #endif
 #ifdef GW_HAS_HIP_BACKEND
+#include "gw/linalg_hip.hpp"
 #include "gw/workspace/hip_screening_workspace.hpp"
 #include "gw/workspace/hip_pq_ph_panel.hpp"
 #endif
@@ -202,12 +204,17 @@ void compute_sigma_c_device_screening(const OrbitalSpace& orbitals,
                                       const GwSettings& settings,
                                       MatrixComplex& sigma_c_im_points,
                                       GwTimings& timings) {
-    if (settings.execution.frequency_parallel_mode != FrequencyParallelMode::Serial) {
-        throw std::runtime_error("Device-resident CUDA screening currently owns one GPU workspace and requires --frequency-parallel serial. Use MPI rank-to-GPU splitting or GPU in-flight queues in a later implementation.");
-    }
+    const std::size_t nfreq = settings.num_freq_points_total;
+    const std::size_t rank = settings.execution.mpi_rank;
+    const std::size_t size = settings.execution.mpi_size;
+    const bool mpi_frequency = settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI;
+    const std::size_t local_total = mpi_frequency
+        ? (rank < nfreq ? ((nfreq - 1U - rank) / size + 1U) : 0U)
+        : nfreq;
+    std::size_t local_completed = 0;
 
     auto chunk_start = Clock::now();
-    for (std::size_t f_n = 0; f_n < settings.num_freq_points_total; ++f_n) {
+    for (std::size_t f_n = mpi_frequency ? rank : 0; f_n < nfreq; f_n += (mpi_frequency ? size : 1U)) {
         compute_sigma_c_frequency_device(f_n,
                                          orbitals,
                                          ph_basis,
@@ -219,10 +226,19 @@ void compute_sigma_c_device_screening(const OrbitalSpace& orbitals,
                                          settings,
                                          sigma_c_im_points,
                                          timings);
-        if (root_rank(settings) && ((f_n + 1) % 10 == 0 || f_n + 1 == settings.num_freq_points_total)) {
+        ++local_completed;
+        if (root_rank(settings) && !mpi_frequency &&
+            ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
             const auto now = Clock::now();
             std::cout << "  completed CUDA device-resident frequency " << (f_n + 1) << " / "
-                      << settings.num_freq_points_total << " in "
+                      << nfreq << " in " << elapsed_seconds(chunk_start, now) << " s\n";
+            chunk_start = now;
+        } else if (mpi_frequency && (local_completed == local_total || local_completed % 10U == 0U)) {
+            const auto now = Clock::now();
+            std::cout << "  rank " << settings.execution.mpi_rank
+                      << " completed " << local_completed << " / " << local_total
+                      << " assigned CUDA frequencies on device " << settings.execution.cuda_device_id
+                      << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
                       << elapsed_seconds(chunk_start, now) << " s\n";
             chunk_start = now;
         }
@@ -292,27 +308,41 @@ void compute_sigma_c_hip_screening(const OrbitalSpace& orbitals,
                                       const GwSettings& settings,
                                       MatrixComplex& sigma_c_im_points,
                                       GwTimings& timings) {
-    if (settings.execution.frequency_parallel_mode != FrequencyParallelMode::Serial) {
-        throw std::runtime_error("Device-resident HIP/ROCm screening currently owns one GPU workspace and requires --frequency-parallel serial. Use MPI rank-to-GPU splitting or GPU in-flight queues in a later implementation.");
-    }
+    const std::size_t nfreq = settings.num_freq_points_total;
+    const std::size_t rank = settings.execution.mpi_rank;
+    const std::size_t size = settings.execution.mpi_size;
+    const bool mpi_frequency = settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI;
+    const std::size_t local_total = mpi_frequency
+        ? (rank < nfreq ? ((nfreq - 1U - rank) / size + 1U) : 0U)
+        : nfreq;
+    std::size_t local_completed = 0;
 
     auto chunk_start = Clock::now();
-    for (std::size_t f_n = 0; f_n < settings.num_freq_points_total; ++f_n) {
+    for (std::size_t f_n = mpi_frequency ? rank : 0; f_n < nfreq; f_n += (mpi_frequency ? size : 1U)) {
         compute_sigma_c_frequency_hip(f_n,
-                                         orbitals,
-                                         ph_basis,
-                                         screening,
-                                         pq_ph_view,
-                                         omega_im,
-                                         weights,
-                                         states,
-                                         settings,
-                                         sigma_c_im_points,
-                                         timings);
-        if (root_rank(settings) && ((f_n + 1) % 10 == 0 || f_n + 1 == settings.num_freq_points_total)) {
+                                      orbitals,
+                                      ph_basis,
+                                      screening,
+                                      pq_ph_view,
+                                      omega_im,
+                                      weights,
+                                      states,
+                                      settings,
+                                      sigma_c_im_points,
+                                      timings);
+        ++local_completed;
+        if (root_rank(settings) && !mpi_frequency &&
+            ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
             const auto now = Clock::now();
             std::cout << "  completed HIP/ROCm device-resident frequency " << (f_n + 1) << " / "
-                      << settings.num_freq_points_total << " in "
+                      << nfreq << " in " << elapsed_seconds(chunk_start, now) << " s\n";
+            chunk_start = now;
+        } else if (mpi_frequency && (local_completed == local_total || local_completed % 10U == 0U)) {
+            const auto now = Clock::now();
+            std::cout << "  rank " << settings.execution.mpi_rank
+                      << " completed " << local_completed << " / " << local_total
+                      << " assigned HIP/ROCm frequencies on device " << settings.execution.hip_device_id
+                      << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
                       << elapsed_seconds(chunk_start, now) << " s\n";
             chunk_start = now;
         }
@@ -745,22 +775,27 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 
 #ifdef GW_HAS_CUDA_BACKEND
     if (std::string_view{linalg_backend.name()}.find("cublas") != std::string_view::npos) {
-        if (settings.execution.frequency_parallel_mode != FrequencyParallelMode::Serial) {
-            throw std::runtime_error("Device-resident CUDA screening currently requires --frequency-parallel serial.");
+        if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
+            throw std::runtime_error("Device-resident CUDA screening supports serial or MPI frequency parallelism, not OpenMP frequency parallelism.");
         }
-        if (settings.execution.mpi_size > 1) {
-            throw std::runtime_error("Device-resident CUDA screening currently supports a single MPI rank. Add explicit rank-to-GPU mapping before running with MPI.");
-        }
-        if (root_rank(settings)) {
+        GwSettings cuda_settings = settings;
+        cuda_settings.execution.cuda_device_id = linalg::set_cuda_device_for_local_rank(
+            settings.execution.mpi_local_rank,
+            settings.execution.tasks_per_gpu);
+        if (root_rank(cuda_settings)) {
             std::cout << "Using CUDA device-resident screening workspace for V_ph/epsilon/W_c.\n";
             std::cout << "ERI is still host-replicated; CUDA pq panels use an auto-selected full-resident or streaming panel source.\n";
+            std::cout << "CUDA MPI rank-to-GPU policy: tasks-per-gpu=" << cuda_settings.execution.tasks_per_gpu
+                      << ", local rank/size=" << cuda_settings.execution.mpi_local_rank << " / "
+                      << cuda_settings.execution.mpi_local_size << ", selected device="
+                      << cuda_settings.execution.cuda_device_id << "\n";
         }
         auto device_start = Clock::now();
         MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
         workspace::DeviceScreeningWorkspace screening(v_ph);
-        workspace::DevicePqPhPanelView device_pq_ph_view(integrals, ph_basis, settings.contraction_panel_size);
+        workspace::DevicePqPhPanelView device_pq_ph_view(integrals, ph_basis, cuda_settings.contraction_panel_size);
         result.timings.build_inv_v_seconds = elapsed_seconds(device_start, Clock::now());
-        if (root_rank(settings)) {
+        if (root_rank(cuda_settings)) {
             std::cout << "CUDA screening workspace estimated device allocation after setup: "
                       << static_cast<double>(screening.estimated_device_bytes()) / (1024.0 * 1024.0)
                       << " MiB\n";
@@ -773,27 +808,38 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
                       << " MiB\n";
         }
         compute_sigma_c_device_screening(orbitals, ph_basis, screening, device_pq_ph_view, omega_im, weights,
-                                         states, settings, result.sigma_c_im_points, result.timings);
+                                         states, cuda_settings, result.sigma_c_im_points, result.timings);
+        if (cuda_settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI &&
+            cuda_settings.execution.mpi_size > 1) {
+            auto reduce_start = Clock::now();
+            mpi_allreduce_sum_in_place(result.sigma_c_im_points.data());
+            result.timings.mpi_reduce_seconds += elapsed_seconds(reduce_start, Clock::now());
+        }
     } else
 #endif
 #ifdef GW_HAS_HIP_BACKEND
     if (std::string_view{linalg_backend.name()}.find("hipblas") != std::string_view::npos) {
-        if (settings.execution.frequency_parallel_mode != FrequencyParallelMode::Serial) {
-            throw std::runtime_error("Device-resident HIP/ROCm screening currently requires --frequency-parallel serial.");
+        if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
+            throw std::runtime_error("Device-resident HIP/ROCm screening supports serial or MPI frequency parallelism, not OpenMP frequency parallelism.");
         }
-        if (settings.execution.mpi_size > 1) {
-            throw std::runtime_error("Device-resident HIP/ROCm screening currently supports a single MPI rank. Add explicit rank-to-GPU mapping before running with MPI.");
-        }
-        if (root_rank(settings)) {
+        GwSettings hip_settings = settings;
+        hip_settings.execution.hip_device_id = linalg::set_hip_device_for_local_rank(
+            settings.execution.mpi_local_rank,
+            settings.execution.tasks_per_gpu);
+        if (root_rank(hip_settings)) {
             std::cout << "Using HIP/ROCm device-resident screening workspace for V_ph/epsilon/W_c.\n";
             std::cout << "ERI is still host-replicated; HIP pq panels use an auto-selected full-resident or streaming panel source.\n";
+            std::cout << "HIP/ROCm MPI rank-to-GPU policy: tasks-per-gpu=" << hip_settings.execution.tasks_per_gpu
+                      << ", local rank/size=" << hip_settings.execution.mpi_local_rank << " / "
+                      << hip_settings.execution.mpi_local_size << ", selected device="
+                      << hip_settings.execution.hip_device_id << "\n";
         }
         auto hip_start = Clock::now();
         MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
         workspace::HipScreeningWorkspace screening(v_ph);
-        workspace::HipPqPhPanelView hip_pq_ph_view(integrals, ph_basis, settings.contraction_panel_size);
+        workspace::HipPqPhPanelView hip_pq_ph_view(integrals, ph_basis, hip_settings.contraction_panel_size);
         result.timings.build_inv_v_seconds = elapsed_seconds(hip_start, Clock::now());
-        if (root_rank(settings)) {
+        if (root_rank(hip_settings)) {
             std::cout << "HIP/ROCm screening workspace estimated device allocation after setup: "
                       << static_cast<double>(screening.estimated_device_bytes()) / (1024.0 * 1024.0)
                       << " MiB\n";
@@ -806,7 +852,13 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
                       << " MiB\n";
         }
         compute_sigma_c_hip_screening(orbitals, ph_basis, screening, hip_pq_ph_view, omega_im, weights,
-                                      states, settings, result.sigma_c_im_points, result.timings);
+                                      states, hip_settings, result.sigma_c_im_points, result.timings);
+        if (hip_settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI &&
+            hip_settings.execution.mpi_size > 1) {
+            auto reduce_start = Clock::now();
+            mpi_allreduce_sum_in_place(result.sigma_c_im_points.data());
+            result.timings.mpi_reduce_seconds += elapsed_seconds(reduce_start, Clock::now());
+        }
     } else
 #endif
 #ifdef GW_HAS_SCALAPACK_BACKEND

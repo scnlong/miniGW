@@ -2,6 +2,7 @@
 
 #include "gw/linalg.hpp"
 
+#include <cstddef>
 #include <memory>
 
 namespace gw::linalg {
@@ -34,5 +35,9 @@ public:
 };
 
 [[nodiscard]] std::shared_ptr<const Backend> make_hip_backend();
+
+[[nodiscard]] int hip_device_count();
+[[nodiscard]] int select_hip_device_for_local_rank(std::size_t mpi_local_rank, std::size_t tasks_per_gpu);
+int set_hip_device_for_local_rank(std::size_t mpi_local_rank, std::size_t tasks_per_gpu);
 
 } // namespace gw::linalg
