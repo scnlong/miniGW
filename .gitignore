@@ -24,3 +24,4 @@ tags
 # logs / temporary files
 *.log
 *.tmp
+*.odt

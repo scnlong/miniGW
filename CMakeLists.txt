@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(GW_ENABLE_NATIVE "Enable -march=native when supported" ON)
 option(GW_ENABLE_OPENMP "Enable OpenMP support" ON)
 option(GW_ENABLE_OPENMP_KERNEL_LOOPS "Enable OpenMP in local kernel loops" ON)
-option(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL "Enable experimental OpenMP parallelism over outer frequency points" OFF)
+option(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL "Enable experimental OpenMP parallelism over outer frequency points" ON)
 option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)

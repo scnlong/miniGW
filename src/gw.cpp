@@ -169,9 +169,11 @@ void compute_sigma_c_frequency_device(std::size_t f_n,
         for (const auto p_idx : states) {
             for (std::size_t k0 = 0; k0 < orbitals.nmo(); k0 += panel_size) {
                 const std::size_t width = std::min(panel_size, orbitals.nmo() - k0);
-                MatrixReal pk_panel = pq_ph_view.make_panel(p_idx, k0, width);
+                const workspace::DeviceComplexPanelView pk_panel =
+                    pq_ph_view.fill_panel(p_idx, k0, width);
 
-                const std::vector<Complex> w_minus_v_panel = screening.quadratic_forms_panel(pk_panel);
+                const std::vector<Complex> w_minus_v_panel =
+                    screening.quadratic_forms_panel(pk_panel);
 
                 for (std::size_t kk = 0; kk < width; ++kk) {
                     const std::size_t k_idx = k0 + kk;
