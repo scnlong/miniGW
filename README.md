@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo/miniGW-logo.png" alt="miniGW logo" width="250">
+  <img src="docs/logo/miniGW-logo.png" alt="miniGW logo" width="300">
 </p>
 
 # miniGW
