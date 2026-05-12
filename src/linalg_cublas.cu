@@ -105,7 +105,7 @@ public:
         other.count_ = 0;
     }
 
-    CudaBuffer& operator=(CudaBuffer&& other) noexcept {
+    [[maybe_unused]] CudaBuffer& operator=(CudaBuffer&& other) noexcept {
         if (this != &other) {
             reset();
             ptr_ = other.ptr_;
@@ -133,8 +133,6 @@ public:
     }
 
     [[nodiscard]] cuDoubleComplex* get() noexcept { return ptr_; }
-    [[nodiscard]] const cuDoubleComplex* get() const noexcept { return ptr_; }
-    [[nodiscard]] std::size_t count() const noexcept { return count_; }
 
 private:
     cuDoubleComplex* ptr_{nullptr};
@@ -167,7 +165,6 @@ public:
     }
 
     [[nodiscard]] int* get() noexcept { return ptr_; }
-    [[nodiscard]] const int* get() const noexcept { return ptr_; }
 
 private:
     int* ptr_{nullptr};

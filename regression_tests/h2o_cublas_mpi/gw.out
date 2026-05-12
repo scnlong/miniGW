@@ -1,0 +1,112 @@
+
+--- Begin of C++20 G0W0 Calculation ---
+Loading data from: .
+  - Vxc MO basis shape: (18, 18)
+  - Fermi energy (eV): -2.93264
+  - Number of occupied orbitals: 5
+  - Number of virtual orbitals: 13
+  - Number of MOs: 18
+  - Number of particle-hole states: 65
+  - ERI MO shape: (18, 18, 18, 18)
+
+--- Estimated host-side memory footprint --- 
+  Dimensions:
+    frequency points:            200
+    frequency parallel mode:      mpi
+    MPI ranks:                    4
+    workspace replicas per rank:  1
+  Input arrays resident in each rank's GwInput:
+    ERI tensor:                   820.1 KB
+    Vxc MO matrix:                2.5 KB
+    MO energies:                  144.0 B
+    Input subtotal:               822.8 KB
+  Current runtime resident copies per rank:
+    ERI copy in integrals:        820.1 KB
+    Vxc copy in integrals:        2.5 KB
+    Copy subtotal:                822.7 KB
+  Main GW resident arrays per rank:
+    Sigma_x matrix:               2.5 KB
+    V_ph matrix:                  33.0 KB
+    inv(V_ph) matrix:             66.0 KB
+    pq_ph tensor resident:        0.0 B
+    pq_ph tensor avoided:         164.5 KB
+    sigma_c(iw) grid:             56.2 KB
+    QP energy vector:             144.0 B
+    frequency grids:              6.2 KB
+  Per-frequency workspace, one replica:
+    pi0 diagonal:                 1.0 KB
+    pk vector (legacy scalar):    520.0 B
+    pk panel:                     16.2 KB
+    current sigma vector:         288.0 B
+    quadratic workspace:          1.0 KB
+    one W_c matrix:               66.0 KB
+    W_c construction peak:        396.1 KB
+  Estimated GPU device memory per rank:
+    V_ph(device):                 66.0 KB
+    inv(V_ph)(device):            66.0 KB
+    epsilon(device):              66.0 KB
+    inv_eps_minus_I(device):      66.0 KB
+    W_c(device):                  66.0 KB
+    pi0(device):                  1.0 KB
+    solver workspace estimate:    66.3 KB
+    contraction Y/q workspace:    33.0 KB
+    ERI(device, if resident mode): 0.0 B
+    full ERI device copy avoided: 820.1 KB
+    ph index arrays(device):       520.0 B
+    pq X panel(device):            32.5 KB
+    pq X pinned host staging:      32.5 KB
+    Estimated device subtotal:    463.4 KB
+  Totals:
+    Persistent subtotal per rank: 1.8 MB
+    Workspace subtotal per rank:  415.2 KB
+    Estimated peak per rank:      2.2 MB
+    Aggregate across all ranks:   8.7 MB
+  Note: this version no longer materializes the full pq_ph tensor; pk panels are generated on demand.
+        ERI, V_ph, inv(V_ph), and sigma_c may still be replicated depending on the selected backend.
+        MPI frequency parallelism improves time-to-solution but does not reduce per-rank memory.
+        The self-energy contraction batches (p,k) vectors into panels; this estimate includes one such panel per workspace replica.
+        Host totals exclude allocator overhead, BLAS/LAPACK workspaces, and OS/runtime overhead.
+        GPU device totals are planning estimates; the actual cuSolver/hipSOLVER/hipSOLVER workspace is queried at runtime.
+
+Linear algebra backend: cublas-cusolver-host-wrapper
+Frequency parallel mode: mpi
+OpenMP kernel loops: disabled
+MPI rank/size: 0 / 4
+Total number of Pade parameters: 16
+Total number of transformed Gauss-Legendre frequency points: 200
+pq_ph panel view: nmo=18, n_ph=65, panel size=32
+
+--- Starting Sigma_c(iw) calculation... ---
+Using CUDA device-resident screening workspace for V_ph/epsilon/W_c.
+ERI is still host-replicated; CUDA pq panels use an auto-selected full-resident or streaming panel source.
+CUDA MPI rank-to-GPU policy: tasks-per-gpu=2, local rank/size=0 / 4, selected device=0
+CUDA screening workspace estimated device allocation after setup: 0.325417 MiB
+CUDA pq-panel source mode: full-eri-resident
+CUDA pq-panel source estimated device allocation: 0.833138 MiB
+CUDA pq-panel source estimated pinned host staging: 0 MiB
+  rank 0 completed 10 / 50 assigned CUDA frequencies on device 0 (last global frequency 37 / 200) in 2.95632 s
+  rank 0 completed 20 / 50 assigned CUDA frequencies on device 0 (last global frequency 77 / 200) in 2.93431 s
+  rank 0 completed 30 / 50 assigned CUDA frequencies on device 0 (last global frequency 117 / 200) in 2.93438 s
+  rank 0 completed 40 / 50 assigned CUDA frequencies on device 0 (last global frequency 157 / 200) in 2.93419 s
+  rank 0 completed 50 / 50 assigned CUDA frequencies on device 0 (last global frequency 197 / 200) in 2.93433 s
+Sigma_c(iw) calculation complete.
+
+--- Profiling Baseline ---
+read input:               0.02 s
+total GW wall:           15.21 s
+build mapping:            0.00 s
+exchange:                 0.00 s
+inv(V_ph):                0.06 s
+build Pi0 accum:          0.03 s
+build W_c accum:         11.53 s
+sigma_c accum:            3.14 s
+sigma_c wall:            15.21 s
+MPI reduce:               0.01 s
+pade/output pade:         0.02 s
+
+--- G0W0 Calculation Summary ---
+Orbital   KS Energy      Sigma_x        Sigma_c        Vxc            QP Energy      
+-------   ---------      -------        -------        -------        ---------      
+5         -6.85145       -26.3511       2.49104        -19.3757       -11.3359       
+
+--- End of C++20 G0W0 Calculation ---

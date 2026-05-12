@@ -65,7 +65,7 @@ public:
         other.count_ = 0;
     }
 
-    DeviceComplexBuffer& operator=(DeviceComplexBuffer&& other) noexcept {
+    [[maybe_unused]] DeviceComplexBuffer& operator=(DeviceComplexBuffer&& other) noexcept {
         if (this != &other) {
             reset();
             ptr_ = other.ptr_;
@@ -97,8 +97,6 @@ public:
     }
 
     [[nodiscard]] cuDoubleComplex* get() noexcept { return ptr_; }
-    [[nodiscard]] const cuDoubleComplex* get() const noexcept { return ptr_; }
-    [[nodiscard]] std::size_t count() const noexcept { return count_; }
     [[nodiscard]] std::size_t bytes() const noexcept { return count_ * sizeof(cuDoubleComplex); }
 
 private:
@@ -120,7 +118,7 @@ public:
         other.count_ = 0;
     }
 
-    DeviceIntBuffer& operator=(DeviceIntBuffer&& other) noexcept {
+    [[maybe_unused]] DeviceIntBuffer& operator=(DeviceIntBuffer&& other) noexcept {
         if (this != &other) {
             reset();
             ptr_ = other.ptr_;
@@ -152,7 +150,6 @@ public:
     }
 
     [[nodiscard]] int* get() noexcept { return ptr_; }
-    [[nodiscard]] const int* get() const noexcept { return ptr_; }
     [[nodiscard]] std::size_t bytes() const noexcept { return count_ * sizeof(int); }
 
 private:
