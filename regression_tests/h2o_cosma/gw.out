@@ -1,0 +1,110 @@
+
+--- Begin of C++20 G0W0 Calculation ---
+Loading data from: .
+  - Vxc MO basis shape: (18, 18)
+  - Fermi energy (eV): -2.93264
+  - Number of occupied orbitals: 5
+  - Number of virtual orbitals: 13
+  - Number of MOs: 18
+  - Number of particle-hole states: 65
+  - ERI MO shape: (18, 18, 18, 18)
+
+--- Estimated host-side memory footprint --- 
+  Dimensions:
+    frequency points:            200
+    frequency parallel mode:      mpi
+    MPI ranks:                    4
+    workspace replicas per rank:  1
+  Input arrays resident in each rank's GwInput:
+    ERI tensor:                   820.1 KB
+    Vxc MO matrix:                2.5 KB
+    MO energies:                  144.0 B
+    Input subtotal:               822.8 KB
+  Current runtime resident copies per rank:
+    ERI copy in integrals:        820.1 KB
+    Vxc copy in integrals:        2.5 KB
+    Copy subtotal:                822.7 KB
+  Main GW resident arrays per rank:
+    Sigma_x matrix:               2.5 KB
+    V_ph matrix:                  33.0 KB
+    inv(V_ph) matrix:             66.0 KB
+    pq_ph tensor resident:        0.0 B
+    pq_ph tensor avoided:         164.5 KB
+    sigma_c(iw) grid:             56.2 KB
+    QP energy vector:             144.0 B
+    frequency grids:              6.2 KB
+  Per-frequency workspace, one replica:
+    pi0 diagonal:                 1.0 KB
+    pk vector (legacy scalar):    520.0 B
+    pk panel:                     16.2 KB
+    current sigma vector:         288.0 B
+    quadratic workspace:          1.0 KB
+    one W_c matrix:               66.0 KB
+    W_c construction peak:        396.1 KB
+  Totals:
+    Persistent subtotal per rank: 1.8 MB
+    Workspace subtotal per rank:  415.2 KB
+    Estimated peak per rank:      2.2 MB
+    Aggregate across all ranks:   8.7 MB
+  Note: this version no longer materializes the full pq_ph tensor; pk panels are generated on demand.
+        ERI, V_ph, inv(V_ph), and sigma_c may still be replicated depending on the selected backend.
+        MPI frequency parallelism improves time-to-solution but does not reduce per-rank memory.
+        The self-energy contraction batches (p,k) vectors into panels; this estimate includes one such panel per workspace replica.
+        Host totals exclude allocator overhead, BLAS/LAPACK workspaces, and OS/runtime overhead.
+        GPU device totals are planning estimates; the actual cuSolver/hipSOLVER/hipSOLVER workspace is queried at runtime.
+
+Linear algebra backend: scalapack-replicated-wrapper
+COSMA mode: enabled via ScaLAPACK-compatible pxgemm wrapper; pzgemm_ resolves to COSMA, while pzgetrf_/pzgetrs_/BLACS remain ScaLAPACK.
+Frequency parallel mode: mpi
+OpenMP kernel loops: disabled
+MPI rank/size: 0 / 4
+Total number of Pade parameters: 16
+Total number of transformed Gauss-Legendre frequency points: 200
+pq_ph panel view: nmo=18, n_ph=65, panel size=32
+
+--- Starting Sigma_c(iw) calculation... ---
+Using distributed ScaLAPACK screening workspace for V_ph/epsilon/W_c.
+Distributed GEMM provider: COSMA pxgemm wrapper linked before ScaLAPACK.
+ERI is still replicated; pq_ph is generated as contraction panels.
+ScaLAPACK frequency groups: 1 groups, up to 4 ranks/group.
+  group 0 completed 10 / 200 assigned distributed frequencies (last global frequency 10 / 200) in 1.63357 s
+  group 0 completed 20 / 200 assigned distributed frequencies (last global frequency 20 / 200) in 1.63047 s
+  group 0 completed 30 / 200 assigned distributed frequencies (last global frequency 30 / 200) in 1.63092 s
+  group 0 completed 40 / 200 assigned distributed frequencies (last global frequency 40 / 200) in 1.63117 s
+  group 0 completed 50 / 200 assigned distributed frequencies (last global frequency 50 / 200) in 1.63215 s
+  group 0 completed 60 / 200 assigned distributed frequencies (last global frequency 60 / 200) in 1.63088 s
+  group 0 completed 70 / 200 assigned distributed frequencies (last global frequency 70 / 200) in 1.62901 s
+  group 0 completed 80 / 200 assigned distributed frequencies (last global frequency 80 / 200) in 1.62929 s
+  group 0 completed 90 / 200 assigned distributed frequencies (last global frequency 90 / 200) in 1.63095 s
+  group 0 completed 100 / 200 assigned distributed frequencies (last global frequency 100 / 200) in 1.63163 s
+  group 0 completed 110 / 200 assigned distributed frequencies (last global frequency 110 / 200) in 1.63034 s
+  group 0 completed 120 / 200 assigned distributed frequencies (last global frequency 120 / 200) in 1.62791 s
+  group 0 completed 130 / 200 assigned distributed frequencies (last global frequency 130 / 200) in 1.62861 s
+  group 0 completed 140 / 200 assigned distributed frequencies (last global frequency 140 / 200) in 1.63088 s
+  group 0 completed 150 / 200 assigned distributed frequencies (last global frequency 150 / 200) in 1.63018 s
+  group 0 completed 160 / 200 assigned distributed frequencies (last global frequency 160 / 200) in 1.62966 s
+  group 0 completed 170 / 200 assigned distributed frequencies (last global frequency 170 / 200) in 1.63062 s
+  group 0 completed 180 / 200 assigned distributed frequencies (last global frequency 180 / 200) in 1.62955 s
+  group 0 completed 190 / 200 assigned distributed frequencies (last global frequency 190 / 200) in 1.62872 s
+  group 0 completed 200 / 200 assigned distributed frequencies (last global frequency 200 / 200) in 1.62883 s
+Sigma_c(iw) calculation complete.
+
+--- Profiling Baseline ---
+read input:               0.02 s
+total GW wall:           32.61 s
+build mapping:            0.00 s
+exchange:                 0.00 s
+inv(V_ph):                0.01 s
+build Pi0 accum:          0.11 s
+build W_c accum:         29.31 s
+sigma_c accum:            3.18 s
+sigma_c wall:            32.61 s
+MPI reduce:               0.00 s
+pade/output pade:         0.04 s
+
+--- G0W0 Calculation Summary ---
+Orbital   KS Energy      Sigma_x        Sigma_c        Vxc            QP Energy      
+-------   ---------      -------        -------        -------        ---------      
+5         -6.85145       -26.3511       2.49104        -19.3757       -11.3359       
+
+--- End of C++20 G0W0 Calculation ---
