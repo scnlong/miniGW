@@ -63,9 +63,6 @@ endif()
 if(GW_ENABLE_MPI OR GW_ENABLE_SCALAPACK OR GW_ENABLE_COSMA)
     find_package(MPI REQUIRED COMPONENTS CXX)
 
-    set(GW_TEST_MPI_RANKS 4 CACHE STRING
-    "Number of MPI ranks used by CTest MPI regression tests")
-
     set(GW_TEST_MPI_LAUNCHER "${MPIEXEC_EXECUTABLE}" CACHE STRING
     "MPI launcher used by CTest MPI regression tests, e.g. mpirun, mpiexec, or srun")
 
@@ -391,8 +388,8 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
         add_test(
     	    NAME pyscf_h2o_reference_compute
     	    COMMAND
-    	        gw
-				--input-dir ${PYSCF_REFERENCE_H2O_DIR}
+    	        $<TARGET_FILE:gw>
+		--input-dir ${PYSCF_REFERENCE_H2O_DIR}
     	        --freq-points 200
     	        --pade-params 16
     	        --state 5
@@ -404,8 +401,8 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
     	    COMMAND
     	        ${Python3_EXECUTABLE}
     	        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
-				--reference-file ${PYSCF_REFERENCE_H2O_DIR}/pyscf_E_c_before_Pade.out
-				--output-file ${PYSCF_TEST_H2O_DIR}/E_c_before_Pade.out
+		--reference-file ${PYSCF_REFERENCE_H2O_DIR}/pyscf_E_c_before_Pade.out
+		--output-file ${PYSCF_TEST_H2O_DIR}/E_c_before_Pade.out
     	        --rtol 1e-2
     	        --atol 1e-2
     	        --compare-mode components
@@ -502,7 +499,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
         )
     endif()
 
-    if(GW_ENABLE_MPI)
+    if(GW_ENABLE_MPI AND GW_ENABLE_BLAS_LAPACK)
 	    set(GW_TEST_H2O_MPI_DIR
     	        ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_mpi)
 
@@ -552,7 +549,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 
             set_tests_properties(
                 mpi_h2o_reference_compute
-                PROPERTIES PROCESSORS 8
+                PROPERTIES PROCESSORS 4
     	        DEPENDS mpi_h2o_reference_run)
 
     	    set_tests_properties(
@@ -566,12 +563,87 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
                 DEPENDS mpi_h2o_reference_compute)
 
             set_tests_properties(
+                mpi_h2o_reference_run
                 mpi_h2o_reference_compute
                 mpi_h2o_reference_compare
                 mpi_h2o_energy_summary_compare
                 PROPERTIES LABELS "mpi;cpu"
             )
 
+        if (GW_ENABLE_SCALAPACK)
+	    set(GW_TEST_H2O_SCALAPACK_DIR
+	    ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_scalapack)
+
+            add_test(
+    	        NAME scalapack_h2o_reference_run
+    	        COMMAND
+		${CMAKE_COMMAND} -E make_directory ${GW_TEST_H2O_SCALAPACK_DIR})
+
+	    add_test(
+    	        NAME scalapack_h2o_reference_compute
+    	        COMMAND
+		${CMAKE_COMMAND} -E env
+		OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+		${GW_TEST_MPI_LAUNCHER}
+		${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
+		$<TARGET_FILE:gw>
+		--input-dir ${GW_REFERENCE_H2O_DIR}
+    	        --freq-points 200
+    	        --pade-params 16
+    	        --state 5
+		--output-dir ${GW_TEST_H2O_SCALAPACK_DIR}
+		--frequency-parallel mpi 
+		--linalg-backend scalapack
+		)
+
+            add_test(
+                NAME scalapack_h2o_reference_compare
+                COMMAND
+    	        ${Python3_EXECUTABLE}
+    	        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+		--reference-file ${GW_REFERENCE_H2O_DIR}/E_c_before_Pade.out
+		--output-file ${GW_TEST_H2O_SCALAPACK_DIR}/E_c_before_Pade.out
+    	        --rtol 1e-6
+    	        --atol 1e-6
+    	        --compare-mode components
+		)
+
+            add_test(
+                NAME scalapack_h2o_energy_summary_compare
+                COMMAND
+                ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+                --comparison energy-summary
+                --reference-file ${GW_REFERENCE_H2O_DIR}/gw.out
+		--output-file ${GW_TEST_H2O_SCALAPACK_DIR}/gw.out
+                --orbital 5
+                --rtol 1e-5
+                --atol 1e-5)
+
+            set_tests_properties(
+                scalapack_h2o_reference_compute
+                PROPERTIES PROCESSORS 4
+    	        DEPENDS scalapack_h2o_reference_run)
+
+    	    set_tests_properties(
+    	        scalapack_h2o_reference_compare
+    	        PROPERTIES
+    	        DEPENDS scalapack_h2o_reference_compute)
+
+            set_tests_properties(
+                scalapack_h2o_energy_summary_compare
+                PROPERTIES
+                DEPENDS scalapack_h2o_reference_compute)
+
+            set_tests_properties(
+                scalapack_h2o_reference_run
+                scalapack_h2o_reference_compute
+                scalapack_h2o_reference_compare
+                scalapack_h2o_energy_summary_compare
+                PROPERTIES LABELS "mpi;cpu"
+            )
+
+        endif()	
     endif()
 
     if(GW_ENABLE_CUDA)
@@ -586,7 +658,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		)
 
 		add_test(
-		    NAME h2o_cublas_serial
+		    NAME h2o_cublas_serial_compute
 		    COMMAND
 		        ${CMAKE_COMMAND} -E env
 		        OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
@@ -626,7 +698,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		)
 
 		set_tests_properties(
-		    h2o_cublas_serial
+		    h2o_cublas_serial_compute
 		    PROPERTIES PROCESSORS 1 RESOURCE_LOCK gpu
 		    DEPENDS h2o_cublas_serial_run
 		)
@@ -634,17 +706,18 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		set_tests_properties(
 		    h2o_cublas_serial_compare
 		    PROPERTIES
-		        DEPENDS h2o_cublas_serial
+		        DEPENDS h2o_cublas_serial_compute
 		)
 
 		set_tests_properties(
 		    h2o_cublas_serial_energy_summary_compare
 		    PROPERTIES
-		        DEPENDS h2o_cublas_serial
+		        DEPENDS h2o_cublas_serial_compute
 		)
 
                 set_tests_properties(
-                    h2o_cublas_serial
+                    h2o_cublas_serial_run
+                    h2o_cublas_serial_compute
                     h2o_cublas_serial_compare
                     h2o_cublas_serial_energy_summary_compare
                     PROPERTIES LABELS "serial;cuda"
@@ -662,7 +735,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		)
 
 		add_test(
-		    NAME h2o_cublas_mpi
+		    NAME h2o_cublas_mpi_compute
 		    COMMAND
 			${CMAKE_COMMAND} -E env
 			OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
@@ -705,7 +778,7 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		)
 
 		set_tests_properties(
-		    h2o_cublas_mpi
+		    h2o_cublas_mpi_compute
 		    PROPERTIES PROCESSORS 4 RESOURCE_LOCK gpu
 		    DEPENDS h2o_cublas_mpi_run
 		)
@@ -713,23 +786,100 @@ if(GW_ENABLE_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/regression_tests")
 		set_tests_properties(
 		    h2o_cublas_mpi_compare
 		    PROPERTIES
-		        DEPENDS h2o_cublas_mpi
+		        DEPENDS h2o_cublas_mpi_compute
 		)
 
 		set_tests_properties(
 		    h2o_cublas_mpi_energy_summary_compare
 		    PROPERTIES
-		        DEPENDS h2o_cublas_mpi
+		        DEPENDS h2o_cublas_mpi_compute
 		)
 
                set_tests_properties(
-                   h2o_cublas_mpi
+                   h2o_cublas_mpi_run
+                   h2o_cublas_mpi_compute
                    h2o_cublas_mpi_compare
                    h2o_cublas_mpi_energy_summary_compare
                    PROPERTIES LABELS "mpi;cuda"
                )
+
+            if (GW_ENABLE_COSMA)
+		set(GW_TEST_H2O_COSMA_DIR
+           	    ${CMAKE_CURRENT_BINARY_DIR}/regression_tests/h2o_cosma)
+           
+                add_test(
+               	    NAME cosma_h2o_reference_run
+               	    COMMAND
+		    ${CMAKE_COMMAND} -E make_directory ${GW_TEST_H2O_COSMA_DIR})
+           
+           	add_test(
+               	    NAME cosma_h2o_reference_compute
+               	    COMMAND
+           	    ${CMAKE_COMMAND} -E env
+           	    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+           	    ${GW_TEST_MPI_LAUNCHER}
+           	    ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
+           	    $<TARGET_FILE:gw>
+           	    --input-dir ${GW_REFERENCE_H2O_DIR}
+               	    --freq-points 200
+               	    --pade-params 16
+               	    --state 5
+		    --output-dir ${GW_TEST_H2O_COSMA_DIR}
+           	    --frequency-parallel mpi 
+           	    --linalg-backend cosma
+           	    )
+           
+                add_test(
+                    NAME cosma_h2o_reference_compare
+                    COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+                    --reference-file ${GW_REFERENCE_H2O_DIR}/E_c_before_Pade.out
+		    --output-file ${GW_TEST_H2O_COSMA_DIR}/E_c_before_Pade.out
+                    --rtol 1e-6
+                    --atol 1e-6
+                    --compare-mode components
+           	 )
+           
+                add_test(
+		    NAME cosma_h2o_energy_summary_compare
+                    COMMAND
+                    ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compare_reference.py
+                    --comparison energy-summary
+                    --reference-file ${GW_REFERENCE_H2O_DIR}/gw.out
+           	    --output-file ${GW_TEST_H2O_COSMA_DIR}/gw.out
+                    --orbital 5
+                    --rtol 1e-5
+                    --atol 1e-5)
+           
+                set_tests_properties(
+                    cosma_h2o_reference_compute
+                    PROPERTIES PROCESSORS 4 ESOURCE_LOCK gpu
+               	    DEPENDS cosma_h2o_reference_run)
+           
+               	set_tests_properties(
+               	    cosma_h2o_reference_compare
+               	    PROPERTIES
+               	    DEPENDS cosma_h2o_reference_compute)
+           
+                set_tests_properties(
+                    cosma_h2o_energy_summary_compare
+                    PROPERTIES
+                    DEPENDS cosma_h2o_reference_compute)
+           
+                set_tests_properties(
+                    cosma_h2o_reference_run
+                    cosma_h2o_reference_compute
+                    cosma_h2o_reference_compare
+                    cosma_h2o_energy_summary_compare
+                    PROPERTIES LABELS "mpi;cuda"
+                )
+
+            endif()
         endif()
     endif()
+
 
 endif()
 
