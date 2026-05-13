@@ -18,7 +18,11 @@ cd /e/home/jusers/liu21/jupiter/software/miniGW
 export COSMA_ROOT="/e/home/jusers/liu21/jupiter/software/COSMA/install"
 
 rm -rf build
-cmake -B build -C cmake_install.cmake -DGW_TEST_MPI_LAUNCHER=srun -DGW_TEST_MPI_RANKS=4
+cmake -B build -C cmake_install.cmake \
+  -DGW_TEST_MPI_LAUNCHER=srun \
+  -DGW_TEST_MPI_RANKS=4 \
+  -DGW_TEST_MPI_NUMPROC_FLAG=-n
+
 cmake --build build -j 4
 
 cd build
@@ -39,8 +43,8 @@ export OPENBLAS_NUM_THREADS=4
 ctest -L "lapack" -j1 --output-on-failure | tee -a ../slurm.log
 
 echo "== MPI CPU ==" | tee -a ../slurm.log
-export OMP_NUM_THREADS=2
-export OPENBLAS_NUM_THREADS=2
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
 ctest -L "mpi" -LE "cuda" -j1 --output-on-failure | tee -a ../slurm.log
 
 echo "== CUDA serial ==" | tee -a ../slurm.log
