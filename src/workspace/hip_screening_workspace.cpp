@@ -16,30 +16,29 @@
 namespace gw::workspace {
 namespace {
 
-
-#if defined(__HIP_DEVICE_COMPILE__)
-#define GW_GPU_HD __host__ __device__
+#if defined(__HIPCC__) || defined(__HIP_DEVICE_COMPILE__) || defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_NVIDIA__)
+#define GW_GPU_HD __host__ __device__ inline
 #else
 #define GW_GPU_HD inline
 #endif
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex make_gpu_complex(double real, double imag) noexcept {
-    hipblasDoubleComplex z{};
+[[nodiscard]] GW_GPU_HD hipDoubleComplex make_gpu_complex(double real, double imag) noexcept {
+    hipDoubleComplex z{};
     z.x = real;
     z.y = imag;
     return z;
 }
 
-[[nodiscard]] GW_GPU_HD double gpu_real(hipblasDoubleComplex z) noexcept { return z.x; }
-[[nodiscard]] GW_GPU_HD double gpu_imag(hipblasDoubleComplex z) noexcept { return z.y; }
+[[nodiscard]] GW_GPU_HD double gpu_real(hipDoubleComplex z) noexcept { return z.x; }
+[[nodiscard]] GW_GPU_HD double gpu_imag(hipDoubleComplex z) noexcept { return z.y; }
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex gpu_add(hipblasDoubleComplex a,
-                                                     hipblasDoubleComplex b) noexcept {
+[[nodiscard]] GW_GPU_HD hipDoubleComplex gpu_add(hipDoubleComplex a,
+                                                     hipDoubleComplex b) noexcept {
     return make_gpu_complex(a.x + b.x, a.y + b.y);
 }
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex gpu_sub(hipblasDoubleComplex a,
-                                                     hipblasDoubleComplex b) noexcept {
+[[nodiscard]] GW_GPU_HD hipDoubleComplex gpu_sub(hipDoubleComplex a,
+                                                     hipDoubleComplex b) noexcept {
     return make_gpu_complex(a.x - b.x, a.y - b.y);
 }
 
@@ -71,11 +70,11 @@ void check_hipsolver(hipsolverStatus_t status, const char* call) {
     }
 }
 
-[[nodiscard]] hipblasDoubleComplex to_cu(Complex z) noexcept {
+[[nodiscard]] hipDoubleComplex to_cu(Complex z) noexcept {
     return make_gpu_complex(z.real(), z.imag());
 }
 
-[[nodiscard]] Complex from_cu(hipblasDoubleComplex z) noexcept {
+[[nodiscard]] Complex from_cu(hipDoubleComplex z) noexcept {
     return Complex{gpu_real(z), gpu_imag(z)};
 }
 
@@ -112,26 +111,26 @@ public:
         reset();
         count_ = count;
         if (count_ > 0) {
-            check_hip(hipMalloc(reinterpret_cast<void**>(&ptr_), count_ * sizeof(hipblasDoubleComplex)),
+            check_hip(hipMalloc(reinterpret_cast<void**>(&ptr_), count_ * sizeof(hipDoubleComplex)),
                        "hipMalloc(complex)");
         }
     }
 
     void reset() noexcept {
         if (ptr_ != nullptr) {
-            hipFree(ptr_);
+            (void)hipFree(ptr_);
             ptr_ = nullptr;
         }
         count_ = 0;
     }
 
-    [[nodiscard]] hipblasDoubleComplex* get() noexcept { return ptr_; }
-    [[nodiscard]] const hipblasDoubleComplex* get() const noexcept { return ptr_; }
+    [[nodiscard]] hipDoubleComplex* get() noexcept { return ptr_; }
+    [[nodiscard]] const hipDoubleComplex* get() const noexcept { return ptr_; }
     [[nodiscard]] std::size_t count() const noexcept { return count_; }
-    [[nodiscard]] std::size_t bytes() const noexcept { return count_ * sizeof(hipblasDoubleComplex); }
+    [[nodiscard]] std::size_t bytes() const noexcept { return count_ * sizeof(hipDoubleComplex); }
 
 private:
-    hipblasDoubleComplex* ptr_{nullptr};
+    hipDoubleComplex* ptr_{nullptr};
     std::size_t count_{0};
 };
 
@@ -174,7 +173,7 @@ public:
 
     void reset() noexcept {
         if (ptr_ != nullptr) {
-            hipFree(ptr_);
+            (void)hipFree(ptr_);
             ptr_ = nullptr;
         }
         count_ = 0;
@@ -218,8 +217,8 @@ private:
     return info;
 }
 
-[[nodiscard]] std::vector<hipblasDoubleComplex> real_matrix_to_column_major_complex(const MatrixReal& a) {
-    std::vector<hipblasDoubleComplex> out(a.rows() * a.cols());
+[[nodiscard]] std::vector<hipDoubleComplex> real_matrix_to_column_major_complex(const MatrixReal& a) {
+    std::vector<hipDoubleComplex> out(a.rows() * a.cols());
     for (std::size_t j = 0; j < a.cols(); ++j) {
         for (std::size_t i = 0; i < a.rows(); ++i) {
             out[i + j * a.rows()] = make_gpu_complex(a(i, j), 0.0);
@@ -228,8 +227,8 @@ private:
     return out;
 }
 
-[[nodiscard]] std::vector<hipblasDoubleComplex> identity_column_major(int n) {
-    std::vector<hipblasDoubleComplex> out(static_cast<std::size_t>(n) * static_cast<std::size_t>(n),
+[[nodiscard]] std::vector<hipDoubleComplex> identity_column_major(int n) {
+    std::vector<hipDoubleComplex> out(static_cast<std::size_t>(n) * static_cast<std::size_t>(n),
                                      make_gpu_complex(0.0, 0.0));
     for (int i = 0; i < n; ++i) {
         out[static_cast<std::size_t>(i) + static_cast<std::size_t>(i) * static_cast<std::size_t>(n)] =
@@ -238,9 +237,9 @@ private:
     return out;
 }
 
-__global__ void build_epsilon_kernel(const hipblasDoubleComplex* __restrict__ v_ph,
-                                     const hipblasDoubleComplex* __restrict__ pi0,
-                                     hipblasDoubleComplex* __restrict__ epsilon,
+__global__ void build_epsilon_kernel(const hipDoubleComplex* __restrict__ v_ph,
+                                     const hipDoubleComplex* __restrict__ pi0,
+                                     hipDoubleComplex* __restrict__ epsilon,
                                      int n) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int total = n * n;
@@ -249,9 +248,9 @@ __global__ void build_epsilon_kernel(const hipblasDoubleComplex* __restrict__ v_
     }
     const int row = idx % n;
     const int col = idx / n;
-    const hipblasDoubleComplex v = v_ph[idx];
-    const hipblasDoubleComplex p = pi0[col];
-    hipblasDoubleComplex value = make_gpu_complex(-(gpu_real(v) * gpu_real(p) - gpu_imag(v) * gpu_imag(p)),
+    const hipDoubleComplex v = v_ph[idx];
+    const hipDoubleComplex p = pi0[col];
+    hipDoubleComplex value = make_gpu_complex(-(gpu_real(v) * gpu_real(p) - gpu_imag(v) * gpu_imag(p)),
                                                  -(gpu_real(v) * gpu_imag(p) + gpu_imag(v) * gpu_real(p)));
     if (row == col) {
         value = gpu_add(value, make_gpu_complex(1.0, 0.0));
@@ -259,7 +258,7 @@ __global__ void build_epsilon_kernel(const hipblasDoubleComplex* __restrict__ v_
     epsilon[idx] = value;
 }
 
-__global__ void subtract_identity_kernel(hipblasDoubleComplex* __restrict__ a, int n) {
+__global__ void subtract_identity_kernel(hipDoubleComplex* __restrict__ a, int n) {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
         const int idx = i + i * n;
@@ -267,19 +266,19 @@ __global__ void subtract_identity_kernel(hipblasDoubleComplex* __restrict__ a, i
     }
 }
 
-__global__ void quadratic_forms_kernel(const hipblasDoubleComplex* __restrict__ x,
-                                       const hipblasDoubleComplex* __restrict__ y,
-                                       hipblasDoubleComplex* __restrict__ out,
+__global__ void quadratic_forms_kernel(const hipDoubleComplex* __restrict__ x,
+                                       const hipDoubleComplex* __restrict__ y,
+                                       hipDoubleComplex* __restrict__ out,
                                        int n,
                                        int nvec) {
-    extern __shared__ hipblasDoubleComplex shared[];
+    extern __shared__ hipDoubleComplex shared[];
     const int col = blockIdx.x;
     const int tid = threadIdx.x;
-    hipblasDoubleComplex sum = make_gpu_complex(0.0, 0.0);
+    hipDoubleComplex sum = make_gpu_complex(0.0, 0.0);
     for (int row = tid; row < n; row += blockDim.x) {
         const int idx = row + col * n;
         const double xr = gpu_real(x[idx]);
-        const hipblasDoubleComplex yy = y[idx];
+        const hipDoubleComplex yy = y[idx];
         sum = gpu_add(sum, make_gpu_complex(xr * gpu_real(yy), xr * gpu_imag(yy)));
     }
     shared[tid] = sum;
@@ -329,46 +328,57 @@ struct HipScreeningWorkspace::Impl {
         d_info.allocate(1);
         d_ipiv.allocate(static_cast<std::size_t>(n_));
 
-        std::vector<hipblasDoubleComplex> h_v = real_matrix_to_column_major_complex(v_ph);
-        check_hip(hipMemcpy(d_v_ph.get(), h_v.data(), h_v.size() * sizeof(hipblasDoubleComplex),
+        std::vector<hipDoubleComplex> h_v = real_matrix_to_column_major_complex(v_ph);
+        check_hip(hipMemcpy(d_v_ph.get(), h_v.data(), h_v.size() * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(V_ph H2D)");
 
         compute_inverse_of_v();
     }
 
-    void ensure_solver_workspace() {
-        int lwork = 0;
-        check_hipsolver(hipsolverDnZgetrf_bufferSize(solver.get(), n_, n_, d_epsilon.get(), n_, &lwork),
-                       "hipsolverDnZgetrf_bufferSize");
+    int ensure_solver_workspace(DeviceComplexBuffer& d_a, DeviceComplexBuffer& d_b) {
+        int getrf_lwork = 0;
+        check_hipsolver(hipsolverZgetrf_bufferSize(solver.get(), n_, n_, d_a.get(), n_, &getrf_lwork),
+                       "hipsolverZgetrf_bufferSize");
+
+        int getrs_lwork = 0;
+        check_hipsolver(hipsolverZgetrs_bufferSize(solver.get(), HIPSOLVER_OP_N, n_, n_, d_a.get(), n_,
+                                                   d_ipiv.get(), d_b.get(), n_, &getrs_lwork),
+                       "hipsolverZgetrs_bufferSize");
+
+        const int lwork = std::max({getrf_lwork, getrs_lwork, 1});
         d_work.allocate(static_cast<std::size_t>(lwork));
+        return lwork;
     }
 
     void factorize_and_solve_identity(DeviceComplexBuffer& d_a, DeviceComplexBuffer& d_b) {
-        ensure_solver_workspace();
-        check_hipsolver(hipsolverDnZgetrf(solver.get(), n_, n_, d_a.get(), n_, d_work.get(),
+        const int lwork = ensure_solver_workspace(d_a, d_b);
+        check_hip(hipDeviceSynchronize(), "hipDeviceSynchronize before hipsolverZgetrf");
+        check_hipsolver(hipsolverZgetrf(solver.get(), n_, n_, d_a.get(), n_, d_work.get(), lwork,
                                         d_ipiv.get(), d_info.get()),
-                       "hipsolverDnZgetrf");
+                       "hipsolverZgetrf");
+        check_hip(hipDeviceSynchronize(), "hipDeviceSynchronize after hipsolverZgetrf");
         const int getrf_info = device_info_value(d_info.get());
         if (getrf_info != 0) {
-            throw std::runtime_error("hipsolverDnZgetrf failed with info=" + std::to_string(getrf_info));
+            throw std::runtime_error("hipsolverZgetrf failed with info=" + std::to_string(getrf_info));
         }
-        check_hipsolver(hipsolverDnZgetrs(solver.get(), HIPSOLVER_OP_N, n_, n_, d_a.get(), n_, d_ipiv.get(),
-                                        d_b.get(), n_, d_info.get()),
-                       "hipsolverDnZgetrs");
+        check_hipsolver(hipsolverZgetrs(solver.get(), HIPSOLVER_OP_N, n_, n_, d_a.get(), n_, d_ipiv.get(),
+                                        d_b.get(), n_, d_work.get(), lwork, d_info.get()),
+                       "hipsolverZgetrs");
+        check_hip(hipDeviceSynchronize(), "hipDeviceSynchronize after hipsolverZgetrs");
         const int getrs_info = device_info_value(d_info.get());
         if (getrs_info != 0) {
-            throw std::runtime_error("hipsolverDnZgetrs failed with info=" + std::to_string(getrs_info));
+            throw std::runtime_error("hipsolverZgetrs failed with info=" + std::to_string(getrs_info));
         }
     }
 
     void compute_inverse_of_v() {
         const std::size_t n2 = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
-        check_hip(hipMemcpy(d_epsilon.get(), d_v_ph.get(), n2 * sizeof(hipblasDoubleComplex),
+        check_hip(hipMemcpy(d_epsilon.get(), d_v_ph.get(), n2 * sizeof(hipDoubleComplex),
                               hipMemcpyDeviceToDevice),
                    "hipMemcpy(V_ph to factor buffer)");
-        const std::vector<hipblasDoubleComplex> h_i = identity_column_major(n_);
-        check_hip(hipMemcpy(d_inv_v.get(), h_i.data(), h_i.size() * sizeof(hipblasDoubleComplex),
+        const std::vector<hipDoubleComplex> h_i = identity_column_major(n_);
+        check_hip(hipMemcpy(d_inv_v.get(), h_i.data(), h_i.size() * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(I for inv_v)");
         factorize_and_solve_identity(d_epsilon, d_inv_v);
@@ -378,11 +388,11 @@ struct HipScreeningWorkspace::Impl {
         if (pi0_diag.size() != static_cast<std::size_t>(n_)) {
             throw std::runtime_error("HipScreeningWorkspace::compute_w_c: inconsistent pi0 dimension");
         }
-        std::vector<hipblasDoubleComplex> h_pi0(pi0_diag.size());
+        std::vector<hipDoubleComplex> h_pi0(pi0_diag.size());
         for (std::size_t i = 0; i < pi0_diag.size(); ++i) {
             h_pi0[i] = to_cu(pi0_diag[i]);
         }
-        check_hip(hipMemcpy(d_pi0.get(), h_pi0.data(), h_pi0.size() * sizeof(hipblasDoubleComplex),
+        check_hip(hipMemcpy(d_pi0.get(), h_pi0.data(), h_pi0.size() * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(pi0 H2D)");
 
@@ -391,8 +401,8 @@ struct HipScreeningWorkspace::Impl {
         build_epsilon_kernel<<<blocks, threads>>>(d_v_ph.get(), d_pi0.get(), d_epsilon.get(), n_);
         check_hip(hipGetLastError(), "build_epsilon_kernel");
 
-        const std::vector<hipblasDoubleComplex> h_i = identity_column_major(n_);
-        check_hip(hipMemcpy(d_inv_eps.get(), h_i.data(), h_i.size() * sizeof(hipblasDoubleComplex),
+        const std::vector<hipDoubleComplex> h_i = identity_column_major(n_);
+        check_hip(hipMemcpy(d_inv_eps.get(), h_i.data(), h_i.size() * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(I for inv_eps)");
         factorize_and_solve_identity(d_epsilon, d_inv_eps);
@@ -402,8 +412,8 @@ struct HipScreeningWorkspace::Impl {
         subtract_identity_kernel<<<diag_blocks, diag_threads>>>(d_inv_eps.get(), n_);
         check_hip(hipGetLastError(), "subtract_identity_kernel");
 
-        const hipblasDoubleComplex alpha = make_gpu_complex(1.0, 0.0);
-        const hipblasDoubleComplex beta = make_gpu_complex(0.0, 0.0);
+        const hipDoubleComplex alpha = make_gpu_complex(1.0, 0.0);
+        const hipDoubleComplex beta = make_gpu_complex(0.0, 0.0);
         check_hipblas(hipblasZgemm(blas.get(),
                                  HIPBLAS_OP_T,
                                  HIPBLAS_OP_N,
@@ -421,7 +431,7 @@ struct HipScreeningWorkspace::Impl {
                      "hipblasZgemm(W_c)");
     }
 
-    std::vector<Complex> quadratic_forms_from_device_panel(const hipblasDoubleComplex* d_x, int nvec) {
+    std::vector<Complex> quadratic_forms_from_device_panel(const hipDoubleComplex* d_x, int nvec) {
         if (nvec == 0) {
             return {};
         }
@@ -430,8 +440,8 @@ struct HipScreeningWorkspace::Impl {
         d_y_panel.allocate(panel_count);
         d_q_panel.allocate(static_cast<std::size_t>(nvec));
 
-        const hipblasDoubleComplex alpha = make_gpu_complex(1.0, 0.0);
-        const hipblasDoubleComplex beta = make_gpu_complex(0.0, 0.0);
+        const hipDoubleComplex alpha = make_gpu_complex(1.0, 0.0);
+        const hipDoubleComplex beta = make_gpu_complex(0.0, 0.0);
         check_hipblas(hipblasZgemm(blas.get(),
                                  HIPBLAS_OP_N,
                                  HIPBLAS_OP_N,
@@ -449,12 +459,12 @@ struct HipScreeningWorkspace::Impl {
                      "hipblasZgemm(W_c * X)");
 
         const int threads = reduction_threads(n_);
-        quadratic_forms_kernel<<<nvec, threads, static_cast<std::size_t>(threads) * sizeof(hipblasDoubleComplex)>>>(
+        quadratic_forms_kernel<<<nvec, threads, static_cast<std::size_t>(threads) * sizeof(hipDoubleComplex)>>>(
             d_x, d_y_panel.get(), d_q_panel.get(), n_, nvec);
         check_hip(hipGetLastError(), "quadratic_forms_kernel");
 
-        std::vector<hipblasDoubleComplex> h_q(static_cast<std::size_t>(nvec));
-        check_hip(hipMemcpy(h_q.data(), d_q_panel.get(), h_q.size() * sizeof(hipblasDoubleComplex),
+        std::vector<hipDoubleComplex> h_q(static_cast<std::size_t>(nvec));
+        check_hip(hipMemcpy(h_q.data(), d_q_panel.get(), h_q.size() * sizeof(hipDoubleComplex),
                               hipMemcpyDeviceToHost),
                    "hipMemcpy(quadratic forms D2H)");
         std::vector<Complex> out(h_q.size());
@@ -475,8 +485,8 @@ struct HipScreeningWorkspace::Impl {
         const std::size_t panel_count = static_cast<std::size_t>(n_) * static_cast<std::size_t>(nvec);
         d_x_panel.allocate(panel_count);
 
-        std::vector<hipblasDoubleComplex> h_x = real_matrix_to_column_major_complex(x_panel);
-        check_hip(hipMemcpy(d_x_panel.get(), h_x.data(), h_x.size() * sizeof(hipblasDoubleComplex),
+        std::vector<hipDoubleComplex> h_x = real_matrix_to_column_major_complex(x_panel);
+        check_hip(hipMemcpy(d_x_panel.get(), h_x.data(), h_x.size() * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(X panel H2D)");
 
@@ -488,7 +498,7 @@ struct HipScreeningWorkspace::Impl {
             throw std::runtime_error("HipScreeningWorkspace::quadratic_forms_panel(device): inconsistent panel row count");
         }
         const int nvec = checked_int(x_panel.cols(), "device panel width");
-        const auto* d_x = static_cast<const hipblasDoubleComplex*>(x_panel.device_data());
+        const auto* d_x = static_cast<const hipDoubleComplex*>(x_panel.device_data());
         if (nvec > 0 && d_x == nullptr) {
             throw std::runtime_error("HipScreeningWorkspace::quadratic_forms_panel(device): null device panel");
         }
@@ -544,7 +554,10 @@ matrix::DataOwnership HipScreeningWorkspace::ownership() const noexcept {
     ownership.memory_space = matrix::MemorySpace::Device;
     ownership.distribution = matrix::Distribution::DeviceResident;
     int device = -1;
-    hipGetDevice(&device);
+    const hipError_t status = hipGetDevice(&device);
+    if (status != hipSuccess) {
+        device = -1;
+    }
     ownership.device_id = device;
     return ownership;
 }

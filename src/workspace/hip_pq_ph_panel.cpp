@@ -14,30 +14,29 @@
 namespace gw::workspace {
 namespace {
 
-
-#if defined(__HIP_DEVICE_COMPILE__)
-#define GW_GPU_HD __host__ __device__
+#if defined(__HIPCC__) || defined(__HIP_DEVICE_COMPILE__) || defined(__HIP_PLATFORM_AMD__) || defined(__HIP_PLATFORM_NVIDIA__)
+#define GW_GPU_HD __host__ __device__ inline
 #else
 #define GW_GPU_HD inline
 #endif
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex make_gpu_complex(double real, double imag) noexcept {
-    hipblasDoubleComplex z{};
+[[nodiscard]] GW_GPU_HD hipDoubleComplex make_gpu_complex(double real, double imag) noexcept {
+    hipDoubleComplex z{};
     z.x = real;
     z.y = imag;
     return z;
 }
 
-[[nodiscard]] GW_GPU_HD double gpu_real(hipblasDoubleComplex z) noexcept { return z.x; }
-[[nodiscard]] GW_GPU_HD double gpu_imag(hipblasDoubleComplex z) noexcept { return z.y; }
+[[nodiscard]] GW_GPU_HD double gpu_real(hipDoubleComplex z) noexcept { return z.x; }
+[[nodiscard]] GW_GPU_HD double gpu_imag(hipDoubleComplex z) noexcept { return z.y; }
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex gpu_add(hipblasDoubleComplex a,
-                                                     hipblasDoubleComplex b) noexcept {
+[[nodiscard]] GW_GPU_HD hipDoubleComplex gpu_add(hipDoubleComplex a,
+                                                     hipDoubleComplex b) noexcept {
     return make_gpu_complex(a.x + b.x, a.y + b.y);
 }
 
-[[nodiscard]] GW_GPU_HD hipblasDoubleComplex gpu_sub(hipblasDoubleComplex a,
-                                                     hipblasDoubleComplex b) noexcept {
+[[nodiscard]] GW_GPU_HD hipDoubleComplex gpu_sub(hipDoubleComplex a,
+                                                     hipDoubleComplex b) noexcept {
     return make_gpu_complex(a.x - b.x, a.y - b.y);
 }
 
@@ -94,7 +93,7 @@ public:
 
     void reset() noexcept {
         if (ptr_ != nullptr) {
-            hipFree(ptr_);
+            (void)hipFree(ptr_);
             ptr_ = nullptr;
         }
         count_ = 0;
@@ -150,7 +149,7 @@ public:
 
     void reset() noexcept {
         if (ptr_ != nullptr) {
-            hipHostFree(ptr_);
+            (void)hipHostFree(ptr_);
             ptr_ = nullptr;
         }
         count_ = 0;
@@ -169,7 +168,7 @@ private:
 __global__ void build_pq_panel_kernel(const double* __restrict__ eri,
                                       const int* __restrict__ occ,
                                       const int* __restrict__ virt,
-                                      hipblasDoubleComplex* __restrict__ panel,
+                                      hipDoubleComplex* __restrict__ panel,
                                       int nmo,
                                       int nph,
                                       int p_index,
@@ -204,7 +203,7 @@ __global__ void build_pq_panel_kernel(const double* __restrict__ eri,
     std::size_t total_bytes = 0;
     const hipError_t status = hipMemGetInfo(&free_bytes, &total_bytes);
     if (status != hipSuccess) {
-        hipGetLastError();
+        (void)hipGetLastError();
         return HipPqPhPanelStorageMode::StreamingPanel;
     }
 
@@ -267,7 +266,7 @@ struct HipPqPhPanelView::Impl {
         d_panel.allocate(static_cast<std::size_t>(nph) * static_cast<std::size_t>(max_panel_width));
 
         const std::size_t eri_bytes = eri.data().size() * sizeof(double);
-        const std::size_t panel_bytes = static_cast<std::size_t>(nph) * static_cast<std::size_t>(max_panel_width) * sizeof(hipblasDoubleComplex);
+        const std::size_t panel_bytes = static_cast<std::size_t>(nph) * static_cast<std::size_t>(max_panel_width) * sizeof(hipDoubleComplex);
         mode = choose_mode(requested_mode, eri_bytes, panel_bytes);
 
         if (mode == HipPqPhPanelStorageMode::FullEriResident) {
@@ -293,7 +292,7 @@ struct HipPqPhPanelView::Impl {
 
     void fill_panel_streaming(std::size_t p_index, std::size_t k_begin, std::size_t width) {
         const Tensor4Real& eri = *eri_host;
-        hipblasDoubleComplex* panel = h_panel.get();
+        hipDoubleComplex* panel = h_panel.get();
         for (std::size_t kk = 0; kk < width; ++kk) {
             const std::size_t k_index = k_begin + kk;
             for (std::size_t ph = 0; ph < static_cast<std::size_t>(nph); ++ph) {
@@ -304,7 +303,7 @@ struct HipPqPhPanelView::Impl {
             }
         }
         check_hip(hipMemcpy(d_panel.get(), h_panel.get(),
-                              static_cast<std::size_t>(nph) * width * sizeof(hipblasDoubleComplex),
+                              static_cast<std::size_t>(nph) * width * sizeof(hipDoubleComplex),
                               hipMemcpyHostToDevice),
                    "hipMemcpy(pq panel H2D streaming)");
     }
@@ -360,8 +359,8 @@ struct HipPqPhPanelView::Impl {
     DeviceBuffer<double> d_eri;
     DeviceBuffer<int> d_occ;
     DeviceBuffer<int> d_virt;
-    DeviceBuffer<hipblasDoubleComplex> d_panel;
-    PinnedHostBuffer<hipblasDoubleComplex> h_panel;
+    DeviceBuffer<hipDoubleComplex> d_panel;
+    PinnedHostBuffer<hipDoubleComplex> h_panel;
 };
 
 HipPqPhPanelView::HipPqPhPanelView(const MolecularIntegrals& integrals,

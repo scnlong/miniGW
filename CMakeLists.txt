@@ -14,8 +14,8 @@ option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
 option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
 option(GW_ENABLE_COSMA "Build/link a COSMA GEMM facade with ScaLAPACK solve backend" OFF)
-option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" ON)
-option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" OFF)
+option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" OFF)
+option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" ON)
 
 add_library(gwcore
     src/backend_factory.cpp
@@ -158,28 +158,43 @@ if(GW_ENABLE_CUDA)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cublas)
 endif()
 
-
 if(GW_ENABLE_HIP)
     enable_language(HIP)
-    find_package(hip REQUIRED)
-    find_package(hipblas REQUIRED)
-    find_package(hipsolver REQUIRED)
+
+    find_package(hip CONFIG REQUIRED)
+    find_package(hipblas CONFIG REQUIRED)
+    find_package(hipsolver CONFIG REQUIRED)
+
     add_library(gw_linalg_hip
         src/linalg_hip.cpp
         src/workspace/hip_screening_workspace.cpp
         src/workspace/hip_pq_ph_panel.cpp
     )
-    target_include_directories(gw_linalg_hip PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_hip PUBLIC hip::host hipblas hipsolver)
-    target_compile_features(gw_linalg_hip PUBLIC cxx_std_20)
+
+    target_include_directories(gw_linalg_hip
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
     set_source_files_properties(
         src/linalg_hip.cpp
         src/workspace/hip_screening_workspace.cpp
         src/workspace/hip_pq_ph_panel.cpp
         PROPERTIES LANGUAGE HIP
     )
+
+    target_compile_features(gw_linalg_hip PUBLIC cxx_std_20)
+
     target_compile_definitions(gw_linalg_hip PUBLIC GW_HAS_HIP_BACKEND=1)
     target_compile_definitions(gwcore PUBLIC GW_HAS_HIP_BACKEND=1)
+
+    target_link_libraries(gw_linalg_hip
+        PUBLIC
+            hip::host
+            roc::hipblas
+            roc::hipsolver
+    )
+
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_hip)
 endif()
 
