@@ -157,16 +157,30 @@ If `SCALAPACK_LIBRARIES` is omitted, CMake searches for a library named `scalapa
 
 ### COSMA
 
-COSMA is a distributed GEMM engine, not a complete LAPACK replacement.  The current `cosma` backend keeps the correct semantic split: solve/factorization is delegated to the ScaLAPACK backend, and GEMM has a single replacement point in `src/linalg_cosma.cpp`.  At present the shipped implementation falls back to the ScaLAPACK GEMM path because COSMA's C++ API and installed target names differ across environments.  On a system with a known COSMA installation, replace `cosma_or_scalapack_gemm()` with the corresponding COSMA multiply call while keeping ScaLAPACK for solve/factorization.
+COSMA is integrated through its ScaLAPACK-compatible `pxgemm` wrapper.  miniGW still calls the normal ScaLAPACK/PBLAS `pzgemm_` symbol; when `GW_ENABLE_COSMA=ON`, CMake links `libcosma_pxgemm`, `libcosma`, and `libcosta_scalapack` before the regular ScaLAPACK libraries so those `pzgemm_` calls are resolved by COSMA.  ScaLAPACK remains responsible for BLACS and for `pzgetrf_`/`pzgetrs_`.
 
-Configure with:
+Configure after loading the COSMA and ScaLAPACK modules:
 
 ```bash
 cmake -S . -B build-cosma \
   -DCMAKE_BUILD_TYPE=Release \
   -DGW_ENABLE_MPI=ON \
   -DGW_ENABLE_SCALAPACK=ON \
-  -DGW_ENABLE_COSMA=ON
+  -DGW_ENABLE_COSMA=ON \
+  -DGW_ENABLE_HIP=OFF \
+  -DGW_ENABLE_CUDA=OFF
+```
+
+Run either with the explicit COSMA alias or with the ScaLAPACK backend.  Both
+paths execute the same ScaLAPACK/PBLAS source code; the difference is only that
+`--linalg-backend cosma` requires a COSMA-enabled build and makes the requested
+mode explicit in user scripts:
+
+```bash
+mpirun -np 4 ./build-cosma/gw --linalg-backend cosma --frequency-parallel serial
+
+# Equivalent when the executable was built with -DGW_ENABLE_COSMA=ON:
+mpirun -np 4 ./build-cosma/gw --linalg-backend scalapack --frequency-parallel serial
 ```
 
 ### cuBLAS/cuSolver
@@ -276,12 +290,14 @@ block-cyclic distributed matrix and computes `Y = W_c X` with distributed GEMM.
 This removes the resident `O(nmo^2 n_ph)` `pq_ph` allocation, but the ERI tensor
 itself is still replicated in the current implementation.
 
-The COSMA integration point is now the distributed GEMM provider used by
-`DistributedMatrixComplex::distributed_gemm`.  By default, the COSMA provider
-falls back to ScaLAPACK `PZGEMM`; on a system with a known COSMA CMake target and
-C++ API, replace the marked branch in `src/matrix/distributed_matrix.cpp` with
-the corresponding COSMA multiply call.  ScaLAPACK remains responsible for
-factorization/solve.
+COSMA support does not add a native COSMA C++ call path.  The source code keeps
+calling the standard ScaLAPACK/PBLAS `pzgemm_` routine from
+`distributed_gemm(...)`.  With `-DGW_ENABLE_COSMA=ON`, CMake links
+`libcosma_pxgemm`, `libcosma`, and `libcosta_scalapack` before the regular
+ScaLAPACK libraries, so those `pzgemm_` symbols are resolved by COSMA.  The
+runtime option `--linalg-backend cosma` is therefore an alias for the
+ScaLAPACK distributed backend and is accepted only in COSMA-enabled builds.
+ScaLAPACK still provides BLACS and `pzgetrf_`/`pzgetrs_`.
 
 ## CUDA/HIP device-resident screening path
 

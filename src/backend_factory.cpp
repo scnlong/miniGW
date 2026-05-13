@@ -8,9 +8,6 @@
 #ifdef GW_HAS_SCALAPACK_BACKEND
 #include "gw/linalg_scalapack.hpp"
 #endif
-#ifdef GW_HAS_COSMA_BACKEND
-#include "gw/linalg_cosma.hpp"
-#endif
 #ifdef GW_HAS_CUDA_BACKEND
 #include "gw/linalg_cublas.hpp"
 #endif
@@ -44,10 +41,17 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
     }
 
     if (cli.linalg_backend == "cosma") {
-#ifdef GW_HAS_COSMA_BACKEND
-        return linalg::make_cosma_backend();
+#if defined(GW_HAS_SCALAPACK_BACKEND) && defined(GW_USE_COSMA_PXGEMM)
+        // COSMA is used through its ScaLAPACK-compatible pxgemm wrapper.
+        // The code path is still the ScaLAPACK backend; link order makes
+        // pzgemm_ resolve to libcosma_pxgemm, while pzgetrf_/pzgetrs_/BLACS
+        // remain provided by the regular ScaLAPACK stack.
+        return linalg::make_scalapack_backend();
 #else
-        throw std::runtime_error("This executable was built without the COSMA interface. Reconfigure with -DGW_ENABLE_COSMA=ON.");
+        throw std::runtime_error(
+            "--linalg-backend cosma was requested, but this executable was not built "
+            "with COSMA pxgemm support. Reconfigure with -DGW_ENABLE_SCALAPACK=ON "
+            "-DGW_ENABLE_COSMA=ON and ensure COSMA is linked before ScaLAPACK.");
 #endif
     }
 

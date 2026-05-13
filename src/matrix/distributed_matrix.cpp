@@ -292,16 +292,7 @@ MatrixComplex gather_distributed_to_replicated(const DistributedMatrixComplex& s
 DistributedMatrixComplex distributed_gemm(const DistributedMatrixComplex& a,
                                           const DistributedMatrixComplex& b,
                                           linalg::MatrixTranspose trans_a,
-                                          linalg::MatrixTranspose trans_b,
-                                          DistributedGemmProvider provider) {
-    if (provider == DistributedGemmProvider::CosmaAdapter) {
-        // COSMA is a distributed GEMM provider, not a distributed solver.  The
-        // project keeps this explicit branch as the single integration point for
-        // replacing ScaLAPACK PZGEMM by COSMA once the site-specific COSMA CMake
-        // target and C++ API are known.  Until then, this branch intentionally
-        // falls through to the ScaLAPACK PZGEMM implementation below.
-    }
-
+                                          linalg::MatrixTranspose trans_b) {
     if (a.grid().get() != b.grid().get()) {
         throw std::runtime_error("distributed_gemm: matrices must use the same BLACS grid object");
     }

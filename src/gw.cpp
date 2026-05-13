@@ -711,6 +711,12 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 
     if (root_rank(settings)) {
         std::cout << "Linear algebra backend: " << linalg_backend.name() << '\n';
+#ifdef GW_USE_COSMA_PXGEMM
+        if (caps.distributed_mpi) {
+            std::cout << "COSMA mode: enabled via ScaLAPACK-compatible pxgemm wrapper; "
+                      << "pzgemm_ resolves to COSMA, while pzgetrf_/pzgetrs_/BLACS remain ScaLAPACK.\n";
+        }
+#endif
         std::cout << "Frequency parallel mode: " << to_string(settings.execution.frequency_parallel_mode) << '\n';
         std::cout << "OpenMP kernel loops: " << (settings.execution.openmp_kernel_loops ? "enabled" : "disabled") << '\n';
         std::cout << "MPI rank/size: " << settings.execution.mpi_rank << " / " << settings.execution.mpi_size << '\n';
@@ -865,6 +871,11 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
     if (caps.distributed_mpi) {
         if (root_rank(settings)) {
             std::cout << "Using distributed ScaLAPACK screening workspace for V_ph/epsilon/W_c.\n";
+#ifdef GW_USE_COSMA_PXGEMM
+            std::cout << "Distributed GEMM provider: COSMA pxgemm wrapper linked before ScaLAPACK.\n";
+#else
+            std::cout << "Distributed GEMM provider: ScaLAPACK/PBLAS PZGEMM.\n";
+#endif
             std::cout << "ERI is still replicated; pq_ph is generated as contraction panels.\n";
             if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI) {
                 std::cout << "ScaLAPACK frequency groups: " << settings.execution.num_frequency_groups
@@ -876,14 +887,9 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             }
         }
         auto distributed_start = Clock::now();
-        const matrix::DistributedGemmProvider distributed_gemm_provider =
-            linalg_backend.name().find("cosma") != std::string_view::npos
-                ? matrix::DistributedGemmProvider::CosmaAdapter
-                : matrix::DistributedGemmProvider::ScalapackPzgemm;
         workspace::DistributedScreeningWorkspace screening(integrals,
                                                            ph_basis,
                                                            64,
-                                                           distributed_gemm_provider,
                                                            settings.execution.frequency_group_size);
         result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
         compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,

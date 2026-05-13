@@ -7,14 +7,12 @@ namespace gw::workspace {
 DistributedScreeningWorkspace::DistributedScreeningWorkspace(const MolecularIntegrals& integrals,
                                                              const ParticleHoleBasis& ph_basis,
                                                              int block_size,
-                                                             matrix::DistributedGemmProvider gemm_provider,
                                                              std::size_t ranks_per_group)
     : grid_(matrix::make_blacs_grid(static_cast<int>(ranks_per_group))),
       v_ph_(grid_, ph_basis.size(), ph_basis.size(), block_size, block_size),
       inv_v_(grid_, ph_basis.size(), ph_basis.size(), block_size, block_size),
       w_c_(grid_, ph_basis.size(), ph_basis.size(), block_size, block_size),
-      block_size_(block_size),
-      gemm_provider_(gemm_provider) {
+      block_size_(block_size) {
     v_ph_.for_each_owned_global([&](std::size_t row, std::size_t col, Complex& value) {
         const ParticleHolePair& jb = ph_basis[row];
         const ParticleHolePair& ia = ph_basis[col];
@@ -47,8 +45,7 @@ void DistributedScreeningWorkspace::compute_w_c(const std::vector<Complex>& pi0_
     w_c_ = matrix::distributed_gemm(inv_eps,
                                     inv_v_,
                                     linalg::MatrixTranspose::Transpose,
-                                    linalg::MatrixTranspose::NoTranspose,
-                                    gemm_provider_);
+                                    linalg::MatrixTranspose::NoTranspose);
 }
 
 Complex DistributedScreeningWorkspace::quadratic_form(const std::vector<double>& x) const {
@@ -82,8 +79,7 @@ std::vector<Complex> DistributedScreeningWorkspace::quadratic_forms_panel(const 
         matrix::distributed_gemm(w_c_,
                                  x_dist,
                                  linalg::MatrixTranspose::NoTranspose,
-                                 linalg::MatrixTranspose::NoTranspose,
-                                 gemm_provider_);
+                                 linalg::MatrixTranspose::NoTranspose);
     return matrix::distributed_column_dot_same_layout(x_dist, y_dist);
 }
 

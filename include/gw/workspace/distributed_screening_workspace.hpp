@@ -21,7 +21,6 @@ public:
     DistributedScreeningWorkspace(const MolecularIntegrals& integrals,
                                   const ParticleHoleBasis& ph_basis,
                                   int block_size = 64,
-                                  matrix::DistributedGemmProvider gemm_provider = matrix::DistributedGemmProvider::ScalapackPzgemm,
                                   std::size_t ranks_per_group = 0);
 
     [[nodiscard]] std::size_t size() const noexcept { return v_ph_.global_rows(); }
@@ -45,7 +44,6 @@ private:
     matrix::DistributedMatrixComplex inv_v_{};
     matrix::DistributedMatrixComplex w_c_{};
     int block_size_{64};
-    matrix::DistributedGemmProvider gemm_provider_{matrix::DistributedGemmProvider::ScalapackPzgemm};
 };
 
 } // namespace gw::workspace

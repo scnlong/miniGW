@@ -13,9 +13,9 @@ option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
 option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
-option(GW_ENABLE_COSMA "Build/link a COSMA GEMM facade with ScaLAPACK solve backend" OFF)
+option(GW_ENABLE_COSMA "Link COSMA pxgemm wrapper before ScaLAPACK so PZGEMM calls use COSMA" OFF)
 option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" OFF)
-option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" ON)
+option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" OFF)
 
 add_library(gwcore
     src/backend_factory.cpp
@@ -111,11 +111,59 @@ if(GW_ENABLE_BLAS_LAPACK)
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_blas_lapack)
 endif()
 
+if(GW_ENABLE_COSMA AND NOT GW_ENABLE_SCALAPACK)
+    message(FATAL_ERROR "GW_ENABLE_COSMA requires GW_ENABLE_SCALAPACK=ON. COSMA replaces only ScaLAPACK/PBLAS pxgemm symbols; ScaLAPACK is still needed for BLACS and pzgetrf/pzgetrs.")
+endif()
+
 if(GW_ENABLE_SCALAPACK)
     set(SCALAPACK_LIBRARIES "" CACHE STRING "ScaLAPACK/BLACS libraries; leave empty to search for a library named scalapack")
     if(SCALAPACK_LIBRARIES STREQUAL "")
         find_library(SCALAPACK_LIBRARY NAMES scalapack scalapack-openmpi scalapack-mpich REQUIRED)
         set(SCALAPACK_LIBRARIES ${SCALAPACK_LIBRARY})
+    endif()
+
+    set(GW_COSMA_PXGEMM_LIBRARIES "")
+    if(GW_ENABLE_COSMA)
+        set(COSMA_ROOT "" CACHE PATH "COSMA installation prefix; optional when the module sets CMAKE_PREFIX_PATH or library search paths")
+        set(COSMA_PXGEMM_LIBRARY "" CACHE FILEPATH "COSMA ScaLAPACK-compatible pxgemm wrapper library")
+        set(COSMA_LIBRARY "" CACHE FILEPATH "COSMA core library")
+        set(COSTA_SCALAPACK_LIBRARY "" CACHE FILEPATH "COSTA ScaLAPACK adapter library used by COSMA pxgemm")
+
+        if(NOT COSMA_PXGEMM_LIBRARY)
+            find_library(COSMA_PXGEMM_LIBRARY
+                NAMES cosma_pxgemm
+                HINTS ${COSMA_ROOT} ENV COSMA_ROOT
+                PATH_SUFFIXES lib lib64)
+        endif()
+        if(NOT COSMA_LIBRARY)
+            find_library(COSMA_LIBRARY
+                NAMES cosma
+                HINTS ${COSMA_ROOT} ENV COSMA_ROOT
+                PATH_SUFFIXES lib lib64)
+        endif()
+        if(NOT COSTA_SCALAPACK_LIBRARY)
+            find_library(COSTA_SCALAPACK_LIBRARY
+                NAMES costa_scalapack
+                HINTS ${COSMA_ROOT} ENV COSMA_ROOT
+                PATH_SUFFIXES lib lib64)
+        endif()
+
+        if(NOT COSMA_PXGEMM_LIBRARY OR NOT COSMA_LIBRARY OR NOT COSTA_SCALAPACK_LIBRARY)
+            message(FATAL_ERROR
+                "GW_ENABLE_COSMA=ON, but the COSMA pxgemm wrapper libraries were not found. "
+                "Load the COSMA module, set COSMA_ROOT, add the COSMA prefix to CMAKE_PREFIX_PATH, "
+                "or provide COSMA_PXGEMM_LIBRARY, COSMA_LIBRARY, and COSTA_SCALAPACK_LIBRARY explicitly.")
+        endif()
+
+        set(GW_COSMA_PXGEMM_LIBRARIES
+            ${COSMA_PXGEMM_LIBRARY}
+            ${COSMA_LIBRARY}
+            ${COSTA_SCALAPACK_LIBRARY})
+
+        message(STATUS "COSMA pxgemm wrapper enabled. PZGEMM symbols will be resolved through COSMA before ScaLAPACK.")
+        message(STATUS "  COSMA pxgemm: ${COSMA_PXGEMM_LIBRARY}")
+        message(STATUS "  COSMA core:   ${COSMA_LIBRARY}")
+        message(STATUS "  COSTA adapter:${COSTA_SCALAPACK_LIBRARY}")
     endif()
 
     add_library(gw_linalg_scalapack
@@ -124,21 +172,17 @@ if(GW_ENABLE_SCALAPACK)
         src/workspace/distributed_screening_workspace.cpp
     )
     target_include_directories(gw_linalg_scalapack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_scalapack PUBLIC MPI::MPI_CXX ${SCALAPACK_LIBRARIES})
+    # Link order matters for COSMA: libcosma_pxgemm must appear before any other
+    # library that provides ScaLAPACK/PBLAS pxgemm symbols.  pzgetrf/pzgetrs and
+    # BLACS are still resolved by the regular ScaLAPACK stack.
+    target_link_libraries(gw_linalg_scalapack PUBLIC MPI::MPI_CXX ${GW_COSMA_PXGEMM_LIBRARIES} ${SCALAPACK_LIBRARIES})
     target_compile_definitions(gw_linalg_scalapack PUBLIC GW_HAS_SCALAPACK_BACKEND=1 GW_ENABLE_MPI=1)
     target_compile_definitions(gwcore PUBLIC GW_HAS_SCALAPACK_BACKEND=1)
-    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
-endif()
-
-if(GW_ENABLE_COSMA)
-    if(NOT GW_ENABLE_SCALAPACK)
-        message(FATAL_ERROR "GW_ENABLE_COSMA currently requires GW_ENABLE_SCALAPACK=ON because solve/factorization is delegated to ScaLAPACK.")
+    if(GW_ENABLE_COSMA)
+        target_compile_definitions(gw_linalg_scalapack PUBLIC GW_USE_COSMA_PXGEMM=1)
+        target_compile_definitions(gwcore PUBLIC GW_USE_COSMA_PXGEMM=1)
     endif()
-    add_library(gw_linalg_cosma src/linalg_cosma.cpp)
-    target_include_directories(gw_linalg_cosma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(gw_linalg_cosma PUBLIC gw_linalg_scalapack MPI::MPI_CXX)
-    target_compile_definitions(gw_linalg_cosma PUBLIC GW_HAS_COSMA_BACKEND=1 GW_ENABLE_MPI=1)
-    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cosma)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
 endif()
 
 if(GW_ENABLE_CUDA)
