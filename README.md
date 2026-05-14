@@ -6,7 +6,7 @@
 
 A compact molecular G0W0 code written in modern C++20, using PySCF as the DFT starting point.
 
-The project starts from a serial CPU implementation and a small self-contained `.npy` reader for importing PySCF-generated DFT data. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, cuBLAS/cuSolver, or HIP backends to be added without rewriting the GW driver.
+The project starts from a serial CPU implementation and a small self-contained `.npy` reader for importing PySCF-generated DFT data. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
 
 ## Scope
 
@@ -167,7 +167,6 @@ cmake -S . -B build-cosma \
   -DGW_ENABLE_MPI=ON \
   -DGW_ENABLE_SCALAPACK=ON \
   -DGW_ENABLE_COSMA=ON \
-  -DGW_ENABLE_HIP=OFF \
   -DGW_ENABLE_CUDA=OFF
 ```
 
@@ -299,18 +298,17 @@ runtime option `--linalg-backend cosma` is therefore an alias for the
 ScaLAPACK distributed backend and is accepted only in COSMA-enabled builds.
 ScaLAPACK still provides BLACS and `pzgetrf_`/`pzgetrs_`.
 
-## CUDA/HIP device-resident screening path
+## CUDA device-resident screening path
 
-When configured with `-DGW_ENABLE_CUDA=ON` and run with `--linalg-backend cublas`, miniGW uses a dedicated `DeviceScreeningWorkspace` for the screening part of the GW calculation.  When configured with `-DGW_ENABLE_HIP=ON` and run with `--linalg-backend hipblas`, the analogous HIP/ROCm path uses `HipScreeningWorkspace`.  This is different from the lower-level host-wrapper backends: `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, the solver LU workspace, and contraction panel buffers are allocated once and reused on the GPU.
+When configured with `-DGW_ENABLE_CUDA=ON` and run with `--linalg-backend cublas`, miniGW uses a dedicated `DeviceScreeningWorkspace` for the screening part of the GW calculation. This is different from the lower-level host-wrapper backends: `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, the solver LU workspace, and contraction panel buffers are allocated once and reused on the GPU.
 
 Serial frequency execution is supported for single-rank runs:
 
 ```bash
 ./gw --linalg-backend cublas --frequency-parallel serial
-./gw --linalg-backend hipblas --frequency-parallel serial
 ```
 
-MPI frequency distribution is supported for both CUDA and HIP/ROCm device-resident paths.  Use `--tasks-per-gpu N` to control how many MPI ranks on the same node share one visible GPU device; the default is 4.  The mapping is local-rank based: `device = (local_rank / tasks_per_gpu) % visible_device_count`.
+MPI frequency distribution is supported for CUDA device-resident paths.  Use `--tasks-per-gpu N` to control how many MPI ranks on the same node share one visible GPU device; the default is 4.  The mapping is local-rank based: `device = (local_rank / tasks_per_gpu) % visible_device_count`.
 
 CUDA example:
 
@@ -318,13 +316,7 @@ CUDA example:
 mpirun -np 8 ./gw --linalg-backend cublas --frequency-parallel mpi --tasks-per-gpu 4
 ```
 
-HIP/ROCm example:
-
-```bash
-mpirun -np 8 ./gw --linalg-backend hipblas --frequency-parallel mpi --tasks-per-gpu 4
-```
-
-The input ERI tensor is still replicated in host memory.  The CUDA and HIP/ROCm paths no longer materialize a full `pq_ph` tensor; contraction panels are supplied by the corresponding device panel view, which either assembles them from a full device ERI copy or streams them through pinned host staging when the full ERI would be too large for the GPU.
+The input ERI tensor is still replicated in host memory.  The CUDA path no longer materialize a full `pq_ph` tensor; contraction panels are supplied by the corresponding device panel view, which either assembles them from a full device ERI copy or streams them through pinned host staging when the full ERI would be too large for the GPU.
 
 ### CUDA pq-panel source: resident ERI or streaming panels
 
@@ -336,32 +328,6 @@ The CUDA path now has two device-oriented workspaces:
 `DevicePqPhPanelView` now supports two storage strategies. In `full-eri-resident` mode it uploads the full replicated ERI tensor to the GPU and assembles each panel with a CUDA kernel. In `streaming-panel` mode it leaves ERI on the host, assembles only the requested `n_ph x panel_width` slice in a pinned host staging buffer, and copies that panel to the GPU. The default `auto` mode chooses full ERI residency only when the ERI copy fits a conservative fraction of currently available device memory; otherwise it uses streaming panels.
 
 This is the dense single-GPU endpoint of the current architecture: the screening matrices stay device-resident, and the `pq_ph` panel path no longer requires full `pq_ph(nmo,nmo,n_ph)` materialization or mandatory full ERI residency on the GPU. A production-scale implementation would still need true integral tiling/shell-block streaming or an RI/three-center representation instead of a replicated four-index ERI tensor.
-
-
-### HIP/ROCm backend
-
-AMD GPU support is available through a separate HIP/ROCm backend.  It mirrors the CUDA device-resident screening path but uses HIP runtime, hipBLAS, and hipSOLVER.  Build it with:
-
-```bash
-cmake -S . -B build-hip \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DGW_ENABLE_TESTS=OFF \
-  -DGW_ENABLE_HIP=ON
-cmake --build build-hip -j
-```
-
-Run it with:
-
-```bash
-./build-hip/gw \
-  --input-dir regression_tests/h2o_serial \
-  --linalg-backend hipblas \
-  --frequency-parallel serial \
-  --contraction-panel-size 32
-```
-
-The HIP path is single-rank and device-resident, like the CUDA path.  It keeps `V_ph`, `epsilon`, `inv(V_ph)`, `W_c`, and contraction buffers on the AMD GPU.  The `pq` panel source supports full-ERI-resident and streaming-panel modes.
-
 
 Note on ScaLAPACK frequency groups: with `--frequency-parallel mpi`, only the root rank of each ScaLAPACK communicator group contributes its completed frequency columns to the final world-level reduction. Non-root ranks in the same group participate in all ScaLAPACK collectives but keep their replicated output columns zero before the final `MPI_Allreduce`, avoiding over-counting by the group size.
 

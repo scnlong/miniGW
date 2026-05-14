@@ -28,7 +28,7 @@ struct BackendCapabilities {
     bool uses_device_memory{false};
 
     // True for the COSMA ScaLAPACK-compatible distributed GEMM provider.
-    // This is not the same as miniGW's own device-resident cuBLAS/HIP backend:
+    // This is not the same as miniGW's own device-resident cuBLAS backend:
     // matrices are still managed by the distributed ScaLAPACK-style host path,
     // but GEMM calls are routed explicitly to COSMA's prefixed PBLAS ABI
     // symbol, e.g. cosma_pzgemm_.

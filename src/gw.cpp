@@ -9,11 +9,6 @@
 #include "gw/workspace/device_screening_workspace.hpp"
 #include "gw/workspace/device_pq_ph_panel.hpp"
 #endif
-#ifdef GW_HAS_HIP_BACKEND
-#include "gw/linalg_hip.hpp"
-#include "gw/workspace/hip_screening_workspace.hpp"
-#include "gw/workspace/hip_pq_ph_panel.hpp"
-#endif
 #ifdef GW_HAS_SCALAPACK_BACKEND
 #include "gw/workspace/distributed_screening_workspace.hpp"
 #include "gw/workspace/cosma_distributed_screening_workspace.hpp"
@@ -239,110 +234,6 @@ void compute_sigma_c_device_screening(const OrbitalSpace& orbitals,
             std::cout << "  rank " << settings.execution.mpi_rank
                       << " completed " << local_completed << " / " << local_total
                       << " assigned CUDA frequencies on device " << settings.execution.cuda_device_id
-                      << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
-                      << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
-        }
-    }
-}
-#endif
-
-#ifdef GW_HAS_HIP_BACKEND
-void compute_sigma_c_frequency_hip(std::size_t f_n,
-                                      const OrbitalSpace& orbitals,
-                                      const ParticleHoleBasis& ph_basis,
-                                      workspace::HipScreeningWorkspace& screening,
-                                      workspace::HipPqPhPanelView& pq_ph_view,
-                                      const std::vector<Complex>& omega_im,
-                                      const std::vector<double>& weights,
-                                      const std::vector<std::size_t>& states,
-                                      const GwSettings& settings,
-                                      MatrixComplex& sigma_c_im_points,
-                                      GwTimings& local_timings) {
-    const Complex omega_n_im = omega_im[f_n];
-    std::vector<Complex> current_sigma(orbitals.nmo(), Complex{0.0, 0.0});
-
-    for (std::size_t f_prime = 0; f_prime < settings.num_freq_points_total; ++f_prime) {
-        const Complex omega_prime_im = omega_im[f_prime];
-
-        auto phase_start = Clock::now();
-        const auto pi0_diag = calculate_pi0_ph_diag(omega_prime_im, ph_basis, settings.eta);
-        local_timings.build_pi0_seconds += elapsed_seconds(phase_start, Clock::now());
-
-        phase_start = Clock::now();
-        screening.compute_w_c(pi0_diag);
-        local_timings.invert_epsilon_seconds += elapsed_seconds(phase_start, Clock::now());
-
-        phase_start = Clock::now();
-        const std::size_t panel_size = std::max<std::size_t>(1, settings.contraction_panel_size);
-        for (const auto p_idx : states) {
-            for (std::size_t k0 = 0; k0 < orbitals.nmo(); k0 += panel_size) {
-                const std::size_t width = std::min(panel_size, orbitals.nmo() - k0);
-                const workspace::HipComplexPanelView pk_panel = pq_ph_view.fill_panel(p_idx, k0, width);
-
-                const std::vector<Complex> w_minus_v_panel = screening.quadratic_forms_panel(pk_panel);
-
-                for (std::size_t kk = 0; kk < width; ++kk) {
-                    const std::size_t k_idx = k0 + kk;
-                    const Complex g0_denominator = omega_n_im + orbitals.fermi_energy() - orbitals.energy(k_idx);
-                    const Complex g0_term = g0_denominator /
-                        (g0_denominator * g0_denominator - omega_prime_im * omega_prime_im);
-                    current_sigma[p_idx] -= g0_term * w_minus_v_panel[kk] * weights[f_prime];
-                }
-            }
-        }
-        local_timings.sigma_c_seconds += elapsed_seconds(phase_start, Clock::now());
-    }
-
-    for (const auto p : states) {
-        sigma_c_im_points(p, f_n) = current_sigma[p] / kPi;
-    }
-}
-
-void compute_sigma_c_hip_screening(const OrbitalSpace& orbitals,
-                                      const ParticleHoleBasis& ph_basis,
-                                      workspace::HipScreeningWorkspace& screening,
-                                      workspace::HipPqPhPanelView& pq_ph_view,
-                                      const std::vector<Complex>& omega_im,
-                                      const std::vector<double>& weights,
-                                      const std::vector<std::size_t>& states,
-                                      const GwSettings& settings,
-                                      MatrixComplex& sigma_c_im_points,
-                                      GwTimings& timings) {
-    const std::size_t nfreq = settings.num_freq_points_total;
-    const std::size_t rank = settings.execution.mpi_rank;
-    const std::size_t size = settings.execution.mpi_size;
-    const bool mpi_frequency = settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI;
-    const std::size_t local_total = mpi_frequency
-        ? (rank < nfreq ? ((nfreq - 1U - rank) / size + 1U) : 0U)
-        : nfreq;
-    std::size_t local_completed = 0;
-
-    auto chunk_start = Clock::now();
-    for (std::size_t f_n = mpi_frequency ? rank : 0; f_n < nfreq; f_n += (mpi_frequency ? size : 1U)) {
-        compute_sigma_c_frequency_hip(f_n,
-                                      orbitals,
-                                      ph_basis,
-                                      screening,
-                                      pq_ph_view,
-                                      omega_im,
-                                      weights,
-                                      states,
-                                      settings,
-                                      sigma_c_im_points,
-                                      timings);
-        ++local_completed;
-        if (root_rank(settings) && !mpi_frequency &&
-            ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
-            const auto now = Clock::now();
-            std::cout << "  completed HIP/ROCm device-resident frequency " << (f_n + 1) << " / "
-                      << nfreq << " in " << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
-        } else if (mpi_frequency && (local_completed == local_total || local_completed % 10U == 0U)) {
-            const auto now = Clock::now();
-            std::cout << "  rank " << settings.execution.mpi_rank
-                      << " completed " << local_completed << " / " << local_total
-                      << " assigned HIP/ROCm frequencies on device " << settings.execution.hip_device_id
                       << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
                       << elapsed_seconds(chunk_start, now) << " s\n";
             chunk_start = now;
@@ -829,50 +720,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         }
     } else
 #endif
-#ifdef GW_HAS_HIP_BACKEND
-    if (std::string_view{linalg_backend.name()}.find("hipblas") != std::string_view::npos) {
-        if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
-            throw std::runtime_error("Device-resident HIP/ROCm screening supports serial or MPI frequency parallelism, not OpenMP frequency parallelism.");
-        }
-        GwSettings hip_settings = settings;
-        hip_settings.execution.hip_device_id = linalg::set_hip_device_for_local_rank(
-            settings.execution.mpi_local_rank,
-            settings.execution.tasks_per_gpu);
-        if (root_rank(hip_settings)) {
-            std::cout << "Using HIP/ROCm device-resident screening workspace for V_ph/epsilon/W_c.\n";
-            std::cout << "ERI is still host-replicated; HIP pq panels use an auto-selected full-resident or streaming panel source.\n";
-            std::cout << "HIP/ROCm MPI rank-to-GPU policy: tasks-per-gpu=" << hip_settings.execution.tasks_per_gpu
-                      << ", local rank/size=" << hip_settings.execution.mpi_local_rank << " / "
-                      << hip_settings.execution.mpi_local_size << ", selected device="
-                      << hip_settings.execution.hip_device_id << "\n";
-        }
-        auto hip_start = Clock::now();
-        MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
-        workspace::HipScreeningWorkspace screening(v_ph);
-        workspace::HipPqPhPanelView hip_pq_ph_view(integrals, ph_basis, hip_settings.contraction_panel_size);
-        result.timings.build_inv_v_seconds = elapsed_seconds(hip_start, Clock::now());
-        if (root_rank(hip_settings)) {
-            std::cout << "HIP/ROCm screening workspace estimated device allocation after setup: "
-                      << static_cast<double>(screening.estimated_device_bytes()) / (1024.0 * 1024.0)
-                      << " MiB\n";
-            std::cout << "HIP/ROCm pq-panel source mode: " << hip_pq_ph_view.storage_mode_name() << '\n';
-            std::cout << "HIP/ROCm pq-panel source estimated device allocation: "
-                      << static_cast<double>(hip_pq_ph_view.estimated_device_bytes()) / (1024.0 * 1024.0)
-                      << " MiB\n";
-            std::cout << "HIP/ROCm pq-panel source estimated pinned host staging: "
-                      << static_cast<double>(hip_pq_ph_view.estimated_host_pinned_bytes()) / (1024.0 * 1024.0)
-                      << " MiB\n";
-        }
-        compute_sigma_c_hip_screening(orbitals, ph_basis, screening, hip_pq_ph_view, omega_im, weights,
-                                      states, hip_settings, result.sigma_c_im_points, result.timings);
-        if (hip_settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI &&
-            hip_settings.execution.mpi_size > 1) {
-            auto reduce_start = Clock::now();
-            mpi_allreduce_sum_in_place(result.sigma_c_im_points.data());
-            result.timings.mpi_reduce_seconds += elapsed_seconds(reduce_start, Clock::now());
-        }
-    } else
-#endif
+
 #ifdef GW_HAS_SCALAPACK_BACKEND
     if (caps.distributed_mpi) {
         if (root_rank(settings)) {

@@ -14,9 +14,6 @@
 #ifdef GW_HAS_CUDA_BACKEND
 #include "gw/linalg_cublas.hpp"
 #endif
-#ifdef GW_HAS_HIP_BACKEND
-#include "gw/linalg_hip.hpp"
-#endif
 
 #include <stdexcept>
 
@@ -65,15 +62,7 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
 #endif
     }
 
-    if (cli.linalg_backend == "hipblas") {
-#ifdef GW_HAS_HIP_BACKEND
-        return linalg::make_hip_backend();
-#else
-        throw std::runtime_error("This executable was built without the hipBLAS/hipSOLVER interface. Reconfigure with -DGW_ENABLE_HIP=ON.");
-#endif
-    }
-
-    throw std::runtime_error("Unknown --linalg-backend value: " + cli.linalg_backend + ". Supported values: reference, blas-lapack, scalapack, cosma, cublas, hipblas.");
+    throw std::runtime_error("Unknown --linalg-backend value: " + cli.linalg_backend + ". Supported values: reference, blas-lapack, scalapack, cosma, cublas.");
 }
 
 void validate_backend_for_execution(const linalg::Backend& backend, const ExecutionPolicy& execution) {
@@ -103,7 +92,7 @@ void validate_backend_for_execution(const linalg::Backend& backend, const Execut
 
     if (execution.frequency_parallel_mode == FrequencyParallelMode::Serial && execution.mpi_size > 1) {
         if (caps.uses_device_memory) {
-            throw std::runtime_error("Device backend selected with multiple MPI ranks in serial frequency mode. Current CUDA/HIP workspaces support a single MPI rank; add explicit rank-to-GPU mapping before running with MPI.");
+            throw std::runtime_error("Device backend selected with multiple MPI ranks in serial frequency mode. Current CUDA workspaces support a single MPI rank; add explicit rank-to-GPU mapping before running with MPI.");
         }
         throw std::runtime_error("Replicated local host backend selected with multiple MPI ranks in serial frequency mode. Run without mpirun or use --frequency-parallel mpi.");
     }

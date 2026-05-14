@@ -167,7 +167,7 @@ MemoryFootprint estimate_memory_footprint(const GwInput& input,
 
     if (settings.linalg_backend && settings.linalg_backend->capabilities().uses_device_memory) {
         // DeviceScreeningWorkspace stores V_ph as complex column-major data and
-        // keeps inv(V_ph), epsilon, inv(epsilon)-I and W_c resident.  cuSolver/hipSOLVER
+        // keeps inv(V_ph), epsilon, inv(epsilon)-I and W_c resident.  cuSolver
         // workspace is queried at runtime, so use one n_ph^2 complex matrix as
         // a conservative planning estimate here.  The panel term covers X, Y,
         // and the small output vector for panel quadratic forms.
@@ -270,7 +270,7 @@ void print_memory_footprint_report(const MemoryFootprint& footprint) {
               << "        MPI frequency parallelism improves time-to-solution but does not reduce per-rank memory.\n"
               << "        The self-energy contraction batches (p,k) vectors into panels; this estimate includes one such panel per workspace replica.\n"
               << "        Host totals exclude allocator overhead, BLAS/LAPACK workspaces, and OS/runtime overhead.\n"
-              << "        GPU device totals are planning estimates; the actual cuSolver/hipSOLVER/hipSOLVER workspace is queried at runtime.\n\n";
+              << "        GPU device totals are planning estimates; the actual cuSolver workspace is queried at runtime.\n\n";
 }
 
 } // namespace gw
