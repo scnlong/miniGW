@@ -13,8 +13,8 @@ option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
 option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
-option(GW_ENABLE_COSMA "Enable explicit COSMA prefixed pxgemm backend, using cosma_pzgemm_ for distributed GEMM" ON)
-option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" ON)
+option(GW_ENABLE_COSMA "Enable explicit COSMA prefixed pxgemm backend, using cosma_pzgemm_ for distributed GEMM" OFF)
+option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" OFF)
 
 option(GW_ENABLE_TESTS "Enable CTest-based regression tests" ON)
 option(GW_ENABLE_PYSCF_TESTS "Enable PySCF-based regression tests" OFF)
@@ -41,6 +41,10 @@ target_include_directories(gwcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_options(gwcore PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Wconversion>
 )
+
+if(GW_ENABLE_SCALAPACK OR GW_ENABLE_COSMA)
+    set(GW_ENABLE_MPI ON CACHE BOOL "Enable MPI support" FORCE)
+endif()
 
 if(GW_ENABLE_NATIVE)
     target_compile_options(gwcore PRIVATE

@@ -11,6 +11,9 @@
 #endif
 #ifdef GW_HAS_SCALAPACK_BACKEND
 #include "gw/workspace/distributed_screening_workspace.hpp"
+#endif
+
+#ifdef GW_HAS_COSMA_BACKEND
 #include "gw/workspace/cosma_distributed_screening_workspace.hpp"
 #endif
 
@@ -742,6 +745,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
         }
         auto distributed_start = Clock::now();
         if (caps.uses_cosma_pxgemm) {
+#ifdef GW_HAS_COSMA_BACKEND
             workspace::CosmaDistributedScreeningWorkspace screening(integrals,
                                                                     ph_basis,
                                                                     64,
@@ -749,6 +753,10 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
             compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
                                                   states, settings, result.sigma_c_im_points, result.timings);
+#else
+            throw std::runtime_error(
+                "COSMA backend was selected, but miniGW was built without GW_HAS_COSMA_BACKEND.");
+#endif
         } else {
             workspace::DistributedScreeningWorkspace screening(integrals,
                                                                ph_basis,
