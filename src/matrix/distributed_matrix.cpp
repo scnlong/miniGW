@@ -33,6 +33,15 @@ void pzgemm_(const char* transa, const char* transb,
              const Complex* b, const int* ib, const int* jb, const int* descb,
              const Complex* beta,
              Complex* c, const int* ic, const int* jc, const int* descc);
+#ifdef GW_USE_COSMA_PXGEMM
+void cosma_pzgemm_(const char* transa, const char* transb,
+                   const int* m, const int* n, const int* k,
+                   const Complex* alpha,
+                   const Complex* a, const int* ia, const int* ja, const int* desca,
+                   const Complex* b, const int* ib, const int* jb, const int* descb,
+                   const Complex* beta,
+                   Complex* c, const int* ic, const int* jc, const int* descc);
+#endif
 
 void pzgetrf_(const int* m, const int* n,
               Complex* a, const int* ia, const int* ja, const int* desca,
@@ -292,7 +301,8 @@ MatrixComplex gather_distributed_to_replicated(const DistributedMatrixComplex& s
 DistributedMatrixComplex distributed_gemm(const DistributedMatrixComplex& a,
                                           const DistributedMatrixComplex& b,
                                           linalg::MatrixTranspose trans_a,
-                                          linalg::MatrixTranspose trans_b) {
+                                          linalg::MatrixTranspose trans_b,
+                                          DistributedGemmProvider provider) {
     if (a.grid().get() != b.grid().get()) {
         throw std::runtime_error("distributed_gemm: matrices must use the same BLACS grid object");
     }
@@ -312,25 +322,54 @@ DistributedMatrixComplex distributed_gemm(const DistributedMatrixComplex& a,
     const Complex alpha{1.0, 0.0};
     const Complex beta{0.0, 0.0};
 
-    pzgemm_(&ta,
-            &tb,
-            &m,
-            &n,
-            &k,
-            &alpha,
-            a.local_data_ptr(),
-            &one,
-            &one,
-            a.descriptor(),
-            b.local_data_ptr(),
-            &one,
-            &one,
-            b.descriptor(),
-            &beta,
-            c.local_data_ptr(),
-            &one,
-            &one,
-            c.descriptor());
+    switch (provider) {
+        case DistributedGemmProvider::Scalapack:
+            pzgemm_(&ta,
+                    &tb,
+                    &m,
+                    &n,
+                    &k,
+                    &alpha,
+                    a.local_data_ptr(),
+                    &one,
+                    &one,
+                    a.descriptor(),
+                    b.local_data_ptr(),
+                    &one,
+                    &one,
+                    b.descriptor(),
+                    &beta,
+                    c.local_data_ptr(),
+                    &one,
+                    &one,
+                    c.descriptor());
+            break;
+        case DistributedGemmProvider::CosmaPrefixedPxgemm:
+#ifdef GW_USE_COSMA_PXGEMM
+            cosma_pzgemm_(&ta,
+                          &tb,
+                          &m,
+                          &n,
+                          &k,
+                          &alpha,
+                          a.local_data_ptr(),
+                          &one,
+                          &one,
+                          a.descriptor(),
+                          b.local_data_ptr(),
+                          &one,
+                          &one,
+                          b.descriptor(),
+                          &beta,
+                          c.local_data_ptr(),
+                          &one,
+                          &one,
+                          c.descriptor());
+#else
+            throw std::runtime_error("distributed_gemm: COSMA provider requested but miniGW was built without GW_USE_COSMA_PXGEMM");
+#endif
+            break;
+    }
     return c;
 }
 

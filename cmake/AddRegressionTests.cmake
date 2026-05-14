@@ -12,6 +12,10 @@ set(GW_REGRESSION_OUTPUT_ROOT
     "${CMAKE_CURRENT_BINARY_DIR}/regression_tests"
 )
 
+set(GW_COSMA_CUDA_TEST_ENV "" CACHE STRING
+    "Semicolon-separated extra KEY=VALUE environment entries for cosma_cuda_h2o_reference_compute"
+)
+
 function(gw_set_test_labels labels)
     set_tests_properties(${ARGN}
         PROPERTIES LABELS "${labels}"
@@ -372,7 +376,7 @@ function(gw_add_h2o_cosma_test)
     endif()
 
     set(test_dir "${GW_REGRESSION_OUTPUT_ROOT}/h2o_cosma")
-    set(labels "mpi;cpu;cosma")
+    set(labels "mpi;cosma")
 
     add_test(
         NAME cosma_h2o_reference_run
@@ -450,6 +454,7 @@ function(gw_add_h2o_cosma_cuda_test)
             ${CMAKE_COMMAND} -E env
             OMP_NUM_THREADS=1
             OPENBLAS_NUM_THREADS=1
+            ${GW_COSMA_CUDA_TEST_ENV}
             ${GW_TEST_MPI_LAUNCHER}
             ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
             $<TARGET_FILE:gw>
@@ -460,6 +465,26 @@ function(gw_add_h2o_cosma_cuda_test)
             --output-dir "${test_dir}"
             --frequency-parallel mpi
             --linalg-backend cosma
+    )
+
+    gw_add_component_compare_test(
+        cosma_cuda_h2o_reference_compare
+        "${GW_REFERENCE_H2O_DIR}"
+        "${test_dir}"
+        1e-6
+        1e-6
+        cosma_cuda_h2o_reference_compute
+        "${labels}"
+    )
+
+    gw_add_energy_summary_compare_test(
+        cosma_cuda_h2o_energy_summary_compare
+        "${GW_REFERENCE_H2O_DIR}"
+        "${test_dir}"
+        1e-5
+        1e-5
+        cosma_cuda_h2o_reference_compute
+        "${labels}"
     )
 
     set_tests_properties(cosma_cuda_h2o_reference_compute

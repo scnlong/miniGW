@@ -43,10 +43,10 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
     if (cli.linalg_backend == "cosma") {
 #if defined(GW_HAS_SCALAPACK_BACKEND) && defined(GW_USE_COSMA_PXGEMM)
         // COSMA is used through its ScaLAPACK-compatible pxgemm wrapper.
-        // The code path is still the ScaLAPACK backend; link order makes
-        // pzgemm_ resolve to libcosma_pxgemm, while pzgetrf_/pzgetrs_/BLACS
-        // remain provided by the regular ScaLAPACK stack.
-        return linalg::make_scalapack_backend();
+        // The distributed code path is still ScaLAPACK-style host/block-cyclic;
+        // the distinct backend object exists to make runtime selection and logs
+        // unambiguous.  Actual pxgemm interception remains a link-time property.
+        return linalg::make_cosma_pxgemm_backend();
 #else
         throw std::runtime_error(
             "--linalg-backend cosma was requested, but this executable was not built "

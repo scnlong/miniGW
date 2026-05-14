@@ -26,6 +26,18 @@ struct BackendCapabilities {
     bool uses_internal_threads{false};
     bool distributed_mpi{false};
     bool uses_device_memory{false};
+
+    // True for the COSMA ScaLAPACK-compatible distributed GEMM provider.
+    // This is not the same as miniGW's own device-resident cuBLAS/HIP backend:
+    // matrices are still managed by the distributed ScaLAPACK-style host path,
+    // but GEMM calls are routed explicitly to COSMA's prefixed PBLAS ABI
+    // symbol, e.g. cosma_pzgemm_.
+    bool uses_cosma_pxgemm{false};
+
+    // True if the external provider may use GPUs internally.  This flag is
+    // diagnostic only; it does not imply that miniGW owns device buffers or that
+    // a given run actually exercised GPU kernels.
+    bool external_provider_may_use_gpu{false};
 };
 
 class Backend {

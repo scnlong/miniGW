@@ -13,7 +13,7 @@ option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
 option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
 option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
-option(GW_ENABLE_COSMA "Link COSMA pxgemm wrapper before ScaLAPACK so PZGEMM calls use COSMA" ON)
+option(GW_ENABLE_COSMA "Enable explicit COSMA prefixed pxgemm backend, using cosma_pzgemm_ for distributed GEMM" ON)
 option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" ON)
 option(GW_ENABLE_HIP "Build/link a HIP/ROCm hipBLAS/hipSOLVER backend" OFF)
 
@@ -121,7 +121,7 @@ endif()
 if(GW_ENABLE_COSMA AND NOT GW_ENABLE_SCALAPACK)
     message(FATAL_ERROR
         "GW_ENABLE_COSMA requires GW_ENABLE_SCALAPACK=ON. "
-        "COSMA replaces only ScaLAPACK/PBLAS pxgemm symbols; "
+        "COSMA supplies only the distributed GEMM provider; "
         "ScaLAPACK is still needed for BLACS and pzgetrf/pzgetrs."
     )
 endif()
@@ -140,6 +140,8 @@ if(GW_ENABLE_SCALAPACK)
     endif()
 
     set(GW_COSMA_PXGEMM_LIBRARIES "")
+    set(GW_COSMA_GPU_SUPPORT_LIBRARIES "")
+    set(GW_COSMA_GPU_CAPABLE OFF)
 
     if(GW_ENABLE_COSMA)
         set(COSMA_ROOT "" CACHE PATH "COSMA installation prefix")
@@ -160,8 +162,12 @@ if(GW_ENABLE_SCALAPACK)
         )
 
         foreach(_dir IN LISTS _cosma_lib_dirs)
-            if(NOT COSMA_PXGEMM_LIBRARY AND EXISTS "${_dir}/libcosma_pxgemm_cpp.a")
-                set(COSMA_PXGEMM_LIBRARY "${_dir}/libcosma_pxgemm_cpp.a")
+            if(NOT COSMA_PREFIXED_PXGEMM_LIBRARY AND EXISTS "${_dir}/libcosma_prefixed_pxgemm.a")
+                set(COSMA_PREFIXED_PXGEMM_LIBRARY "${_dir}/libcosma_prefixed_pxgemm.a")
+            endif()
+
+            if(NOT COSMA_PXGEMM_CPP_LIBRARY AND EXISTS "${_dir}/libcosma_pxgemm_cpp.a")
+                set(COSMA_PXGEMM_CPP_LIBRARY "${_dir}/libcosma_pxgemm_cpp.a")
             endif()
 
             if(NOT COSMA_LIBRARY AND EXISTS "${_dir}/libcosma.a")
@@ -171,11 +177,27 @@ if(GW_ENABLE_SCALAPACK)
             if(NOT COSTA_SCALAPACK_LIBRARY AND EXISTS "${_dir}/libcosta_scalapack.a")
                 set(COSTA_SCALAPACK_LIBRARY "${_dir}/libcosta_scalapack.a")
             endif()
+
+            if(NOT COSTA_LIBRARY AND EXISTS "${_dir}/libcosta.a")
+                set(COSTA_LIBRARY "${_dir}/libcosta.a")
+            endif()
+
+            if(NOT TILED_MM_LIBRARY AND EXISTS "${_dir}/libTiled-MM.a")
+                set(TILED_MM_LIBRARY "${_dir}/libTiled-MM.a")
+            endif()
         endforeach()
 
-        if(NOT COSMA_PXGEMM_LIBRARY)
-            find_library(COSMA_PXGEMM_LIBRARY
-                NAMES cosma_pxgemm
+        if(NOT COSMA_PREFIXED_PXGEMM_LIBRARY)
+            find_library(COSMA_PREFIXED_PXGEMM_LIBRARY
+                NAMES cosma_prefixed_pxgemm
+                HINTS "${COSMA_ROOT}" "${COSMA_ROOT}/usr/local"
+                PATH_SUFFIXES lib64 lib
+            )
+        endif()
+
+        if(NOT COSMA_PXGEMM_CPP_LIBRARY)
+            find_library(COSMA_PXGEMM_CPP_LIBRARY
+                NAMES cosma_pxgemm_cpp
                 HINTS "${COSMA_ROOT}" "${COSMA_ROOT}/usr/local"
                 PATH_SUFFIXES lib64 lib
             )
@@ -197,24 +219,86 @@ if(GW_ENABLE_SCALAPACK)
             )
         endif()
 
-        if(NOT COSMA_PXGEMM_LIBRARY OR NOT COSMA_LIBRARY OR NOT COSTA_SCALAPACK_LIBRARY)
-            message(FATAL_ERROR
-                "GW_ENABLE_COSMA=ON, but COSMA libraries were not found under COSMA_ROOT=${COSMA_ROOT}. "
-                "Expected libcosma_pxgemm_cpp.a, libcosma.a, and libcosta_scalapack.a in "
-                "lib64/, lib/, usr/local/lib64/, or usr/local/lib/."
+        if(NOT COSTA_LIBRARY)
+            find_library(COSTA_LIBRARY
+                NAMES costa
+                HINTS "${COSMA_ROOT}" "${COSMA_ROOT}/usr/local"
+                PATH_SUFFIXES lib64 lib
             )
         endif()
 
+        if(NOT TILED_MM_LIBRARY)
+            find_library(TILED_MM_LIBRARY
+                NAMES Tiled-MM tiled_mm
+                HINTS "${COSMA_ROOT}" "${COSMA_ROOT}/usr/local"
+                PATH_SUFFIXES lib64 lib
+            )
+        endif()
+
+        if(NOT COSMA_PREFIXED_PXGEMM_LIBRARY OR NOT COSMA_LIBRARY OR NOT COSTA_SCALAPACK_LIBRARY OR NOT COSTA_LIBRARY OR NOT TILED_MM_LIBRARY)
+            message(FATAL_ERROR
+                "GW_ENABLE_COSMA=ON, but required COSMA libraries were not found under COSMA_ROOT=${COSMA_ROOT}. "
+                "Expected libcosma_prefixed_pxgemm.a, libcosma.a, libcosta_scalapack.a, libcosta.a, "
+                "and libTiled-MM.a in lib64/, lib/, usr/local/lib64/, or usr/local/lib/. "
+                "miniGW calls COSMA through the prefixed PBLAS ABI symbol cosma_pzgemm_, not by "
+                "interposing the ordinary ScaLAPACK pzgemm_ symbol."
+            )
+        endif()
+
+        if(GW_ENABLE_CUDA)
+            # COSMA can be compiled with GPU/NCCL support independently from
+            # miniGW's own cuBLAS backend.  When CUDA is enabled for this build,
+            # add the common CUDA-side COSMA dependencies explicitly so that a
+            # GPU-capable COSMA archive is not accidentally reduced to a CPU-only
+            # code path by unresolved or unpulled static-archive objects.
+            find_package(CUDAToolkit REQUIRED)
+
+            find_library(NCCL_LIBRARY
+                NAMES nccl
+                HINTS
+                    "$ENV{NCCL_ROOT}"
+                    "$ENV{EBROOTNCCL}"
+                    "$ENV{NCCL_HOME}"
+                PATH_SUFFIXES lib lib64
+            )
+
+            list(APPEND GW_COSMA_GPU_SUPPORT_LIBRARIES CUDA::cudart CUDA::cublas)
+
+            if(NCCL_LIBRARY)
+                list(APPEND GW_COSMA_GPU_SUPPORT_LIBRARIES ${NCCL_LIBRARY})
+                set(GW_COSMA_GPU_CAPABLE ON)
+                message(STATUS "COSMA GPU support libraries enabled for CUDA/NCCL-capable runs.")
+                message(STATUS "  NCCL: ${NCCL_LIBRARY}")
+            else()
+                message(WARNING
+                    "GW_ENABLE_COSMA=ON and GW_ENABLE_CUDA=ON, but NCCL was not found. "
+                    "The COSMA CUDA-labelled regression test will still be registered, but "
+                    "COSMA may not be able to exercise its NCCL/GPU path. Set NCCL_ROOT or "
+                    "NCCL_LIBRARY if your COSMA build requires NCCL.")
+            endif()
+        endif()
+
         set(GW_COSMA_PXGEMM_LIBRARIES
-            ${COSMA_PXGEMM_LIBRARY}
+            ${COSMA_PREFIXED_PXGEMM_LIBRARY}
             ${COSMA_LIBRARY}
             ${COSTA_SCALAPACK_LIBRARY}
+            ${COSTA_LIBRARY}
+            ${TILED_MM_LIBRARY}
+            ${GW_COSMA_GPU_SUPPORT_LIBRARIES}
         )
 
-        message(STATUS "COSMA pxgemm wrapper enabled. PZGEMM symbols will be resolved through COSMA before ScaLAPACK.")
-        message(STATUS "  COSMA pxgemm: ${COSMA_PXGEMM_LIBRARY}")
-        message(STATUS "  COSMA core:   ${COSMA_LIBRARY}")
-        message(STATUS "  COSTA adapter:${COSTA_SCALAPACK_LIBRARY}")
+        message(STATUS "COSMA explicit prefixed pxgemm backend enabled. miniGW will call cosma_pzgemm_ for distributed GEMM.")
+        message(STATUS "  COSMA prefixed pxgemm: ${COSMA_PREFIXED_PXGEMM_LIBRARY}")
+        if(COSMA_PXGEMM_CPP_LIBRARY)
+            message(STATUS "  COSMA pxgemm C++ helper found but not linked directly: ${COSMA_PXGEMM_CPP_LIBRARY}")
+        endif()
+        message(STATUS "  COSMA core:           ${COSMA_LIBRARY}")
+        message(STATUS "  COSTA ScaLAPACK:      ${COSTA_SCALAPACK_LIBRARY}")
+        message(STATUS "  COSTA core:           ${COSTA_LIBRARY}")
+        message(STATUS "  Tiled-MM:             ${TILED_MM_LIBRARY}")
+        if(GW_COSMA_GPU_SUPPORT_LIBRARIES)
+            message(STATUS "  COSMA GPU-side support libraries: ${GW_COSMA_GPU_SUPPORT_LIBRARIES}")
+        endif()
     endif()
 
     add_library(gw_linalg_scalapack
@@ -243,6 +327,10 @@ if(GW_ENABLE_SCALAPACK)
     if(GW_ENABLE_COSMA)
         target_compile_definitions(gw_linalg_scalapack PUBLIC GW_USE_COSMA_PXGEMM=1)
         target_compile_definitions(gwcore PUBLIC GW_USE_COSMA_PXGEMM=1)
+        if(GW_COSMA_GPU_CAPABLE)
+            target_compile_definitions(gw_linalg_scalapack PUBLIC GW_COSMA_GPU_CAPABLE=1)
+            target_compile_definitions(gwcore PUBLIC GW_COSMA_GPU_CAPABLE=1)
+        endif()
     endif()
 
     target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)

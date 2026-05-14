@@ -711,12 +711,15 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 
     if (root_rank(settings)) {
         std::cout << "Linear algebra backend: " << linalg_backend.name() << '\n';
-#ifdef GW_USE_COSMA_PXGEMM
-        if (caps.distributed_mpi) {
-            std::cout << "COSMA mode: enabled via ScaLAPACK-compatible pxgemm wrapper; "
-                      << "pzgemm_ resolves to COSMA, while pzgetrf_/pzgetrs_/BLACS remain ScaLAPACK.\n";
+        if (caps.uses_cosma_pxgemm) {
+            std::cout << "COSMA mode: selected explicit prefixed pxgemm backend. "
+                      << "Distributed GEMM calls use cosma_pzgemm_; "
+                      << "pzgetrf_/pzgetrs_/BLACS remain provided by ScaLAPACK.\n";
+            if (caps.external_provider_may_use_gpu) {
+                std::cout << "COSMA GPU capability: the linked COSMA provider was built with GPU-capable support; "
+                          << "actual GPU use is a COSMA runtime decision and should be verified with nvidia-smi/Nsight.\n";
+            }
         }
-#endif
         std::cout << "Frequency parallel mode: " << to_string(settings.execution.frequency_parallel_mode) << '\n';
         std::cout << "OpenMP kernel loops: " << (settings.execution.openmp_kernel_loops ? "enabled" : "disabled") << '\n';
         std::cout << "MPI rank/size: " << settings.execution.mpi_rank << " / " << settings.execution.mpi_size << '\n';
@@ -870,12 +873,12 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 #ifdef GW_HAS_SCALAPACK_BACKEND
     if (caps.distributed_mpi) {
         if (root_rank(settings)) {
-            std::cout << "Using distributed ScaLAPACK screening workspace for V_ph/epsilon/W_c.\n";
-#ifdef GW_USE_COSMA_PXGEMM
-            std::cout << "Distributed GEMM provider: COSMA pxgemm wrapper linked before ScaLAPACK.\n";
-#else
-            std::cout << "Distributed GEMM provider: ScaLAPACK/PBLAS PZGEMM.\n";
-#endif
+            std::cout << "Using distributed ScaLAPACK-style screening workspace for V_ph/epsilon/W_c.\n";
+            if (caps.uses_cosma_pxgemm) {
+                std::cout << "Distributed GEMM provider: COSMA prefixed PBLAS ABI, calling cosma_pzgemm_.\n";
+            } else {
+                std::cout << "Distributed GEMM provider: ScaLAPACK/PBLAS PZGEMM, calling pzgemm_.\n";
+            }
             std::cout << "ERI is still replicated; pq_ph is generated as contraction panels.\n";
             if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI) {
                 std::cout << "ScaLAPACK frequency groups: " << settings.execution.num_frequency_groups
@@ -887,10 +890,14 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             }
         }
         auto distributed_start = Clock::now();
+        const auto distributed_gemm_provider = caps.uses_cosma_pxgemm
+                                                ? matrix::DistributedGemmProvider::CosmaPrefixedPxgemm
+                                                : matrix::DistributedGemmProvider::Scalapack;
         workspace::DistributedScreeningWorkspace screening(integrals,
                                                            ph_basis,
                                                            64,
-                                                           settings.execution.frequency_group_size);
+                                                           settings.execution.frequency_group_size,
+                                                           distributed_gemm_provider);
         result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
         compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
                                               states, settings, result.sigma_c_im_points, result.timings);
