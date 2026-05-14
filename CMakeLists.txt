@@ -314,7 +314,6 @@ if(GW_ENABLE_SCALAPACK)
     target_link_libraries(gw_linalg_scalapack
         PUBLIC
             MPI::MPI_CXX
-            ${GW_COSMA_PXGEMM_LIBRARIES}
             ${SCALAPACK_LIBRARIES}
     )
 
@@ -323,17 +322,38 @@ if(GW_ENABLE_SCALAPACK)
     )
 
     target_compile_definitions(gwcore PUBLIC GW_HAS_SCALAPACK_BACKEND=1)
+    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
 
     if(GW_ENABLE_COSMA)
-        target_compile_definitions(gw_linalg_scalapack PUBLIC GW_USE_COSMA_PXGEMM=1)
-        target_compile_definitions(gwcore PUBLIC GW_USE_COSMA_PXGEMM=1)
+        add_library(gw_linalg_cosma
+            src/linalg_cosma.cpp
+            src/matrix/cosma_distributed_matrix.cpp
+            src/workspace/cosma_distributed_screening_workspace.cpp
+        )
+
+        target_include_directories(gw_linalg_cosma
+            PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+
+        target_link_libraries(gw_linalg_cosma
+            PUBLIC
+                gw_linalg_scalapack
+                ${GW_COSMA_PXGEMM_LIBRARIES}
+                ${SCALAPACK_LIBRARIES}
+        )
+
+        target_compile_definitions(gw_linalg_cosma
+            PUBLIC GW_HAS_COSMA_BACKEND=1 GW_USE_COSMA_PXGEMM=1 GW_ENABLE_MPI=1
+        )
+        target_compile_definitions(gwcore PUBLIC GW_HAS_COSMA_BACKEND=1 GW_USE_COSMA_PXGEMM=1)
+
         if(GW_COSMA_GPU_CAPABLE)
-            target_compile_definitions(gw_linalg_scalapack PUBLIC GW_COSMA_GPU_CAPABLE=1)
+            target_compile_definitions(gw_linalg_cosma PUBLIC GW_COSMA_GPU_CAPABLE=1)
             target_compile_definitions(gwcore PUBLIC GW_COSMA_GPU_CAPABLE=1)
         endif()
-    endif()
 
-    target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_scalapack)
+        target_link_libraries(gw_linalg_backends INTERFACE gw_linalg_cosma)
+    endif()
 endif()
 
 if(GW_ENABLE_CUDA)

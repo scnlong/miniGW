@@ -15,10 +15,6 @@
 
 namespace gw::matrix {
 
-enum class DistributedGemmProvider {
-    Scalapack,
-    CosmaPrefixedPxgemm
-};
 
 // A 2-D BLACS block-cyclic complex matrix used by the ScaLAPACK path.
 // The local storage is column-major because ScaLAPACK expects Fortran layout.
@@ -137,8 +133,7 @@ private:
 [[nodiscard]] DistributedMatrixComplex distributed_gemm(const DistributedMatrixComplex& a,
                                                        const DistributedMatrixComplex& b,
                                                        linalg::MatrixTranspose trans_a = linalg::MatrixTranspose::NoTranspose,
-                                                       linalg::MatrixTranspose trans_b = linalg::MatrixTranspose::NoTranspose,
-                                                       DistributedGemmProvider provider = DistributedGemmProvider::Scalapack);
+                                                       linalg::MatrixTranspose trans_b = linalg::MatrixTranspose::NoTranspose);
 
 [[nodiscard]] DistributedMatrixComplex distributed_inverse_by_solve(const DistributedMatrixComplex& a);
 

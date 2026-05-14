@@ -8,6 +8,9 @@
 #ifdef GW_HAS_SCALAPACK_BACKEND
 #include "gw/linalg_scalapack.hpp"
 #endif
+#ifdef GW_HAS_COSMA_BACKEND
+#include "gw/linalg_cosma.hpp"
+#endif
 #ifdef GW_HAS_CUDA_BACKEND
 #include "gw/linalg_cublas.hpp"
 #endif
@@ -41,17 +44,16 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
     }
 
     if (cli.linalg_backend == "cosma") {
-#if defined(GW_HAS_SCALAPACK_BACKEND) && defined(GW_USE_COSMA_PXGEMM)
-        // COSMA is used through its ScaLAPACK-compatible pxgemm wrapper.
-        // The distributed code path is still ScaLAPACK-style host/block-cyclic;
-        // the distinct backend object exists to make runtime selection and logs
-        // unambiguous.  Actual pxgemm interception remains a link-time property.
+#ifdef GW_HAS_COSMA_BACKEND
+        // COSMA is used through its prefixed ScaLAPACK-compatible pxgemm ABI.
+        // The distributed code path remains host/block-cyclic, but GEMM is
+        // explicitly routed to cosma_pzgemm_ instead of ordinary pzgemm_.
         return linalg::make_cosma_pxgemm_backend();
 #else
         throw std::runtime_error(
             "--linalg-backend cosma was requested, but this executable was not built "
             "with COSMA pxgemm support. Reconfigure with -DGW_ENABLE_SCALAPACK=ON "
-            "-DGW_ENABLE_COSMA=ON and ensure COSMA is linked before ScaLAPACK.");
+            "-DGW_ENABLE_COSMA=ON and ensure libcosma_prefixed_pxgemm.a is available.");
 #endif
     }
 

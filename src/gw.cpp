@@ -16,6 +16,7 @@
 #endif
 #ifdef GW_HAS_SCALAPACK_BACKEND
 #include "gw/workspace/distributed_screening_workspace.hpp"
+#include "gw/workspace/cosma_distributed_screening_workspace.hpp"
 #endif
 
 #include <algorithm>
@@ -351,10 +352,11 @@ void compute_sigma_c_hip_screening(const OrbitalSpace& orbitals,
 #endif
 
 #ifdef GW_HAS_SCALAPACK_BACKEND
+template <class DistributedScreeningWorkspaceT>
 void compute_sigma_c_frequency_distributed(std::size_t f_n,
                                            const OrbitalSpace& orbitals,
                                            const ParticleHoleBasis& ph_basis,
-                                           workspace::DistributedScreeningWorkspace& screening,
+                                           DistributedScreeningWorkspaceT& screening,
                                            const workspace::PqPhPanelView& pq_ph_view,
                                            const std::vector<Complex>& omega_im,
                                            const std::vector<double>& weights,
@@ -415,9 +417,10 @@ void compute_sigma_c_frequency_distributed(std::size_t f_n,
     }
 }
 
+template <class DistributedScreeningWorkspaceT>
 void compute_sigma_c_distributed_screening(const OrbitalSpace& orbitals,
                                            const ParticleHoleBasis& ph_basis,
-                                           workspace::DistributedScreeningWorkspace& screening,
+                                           DistributedScreeningWorkspaceT& screening,
                                            const workspace::PqPhPanelView& pq_ph_view,
                                            const std::vector<Complex>& omega_im,
                                            const std::vector<double>& weights,
@@ -890,17 +893,23 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
             }
         }
         auto distributed_start = Clock::now();
-        const auto distributed_gemm_provider = caps.uses_cosma_pxgemm
-                                                ? matrix::DistributedGemmProvider::CosmaPrefixedPxgemm
-                                                : matrix::DistributedGemmProvider::Scalapack;
-        workspace::DistributedScreeningWorkspace screening(integrals,
-                                                           ph_basis,
-                                                           64,
-                                                           settings.execution.frequency_group_size,
-                                                           distributed_gemm_provider);
-        result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
-        compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
-                                              states, settings, result.sigma_c_im_points, result.timings);
+        if (caps.uses_cosma_pxgemm) {
+            workspace::CosmaDistributedScreeningWorkspace screening(integrals,
+                                                                    ph_basis,
+                                                                    64,
+                                                                    settings.execution.frequency_group_size);
+            result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
+            compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
+                                                  states, settings, result.sigma_c_im_points, result.timings);
+        } else {
+            workspace::DistributedScreeningWorkspace screening(integrals,
+                                                               ph_basis,
+                                                               64,
+                                                               settings.execution.frequency_group_size);
+            result.timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
+            compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
+                                                  states, settings, result.sigma_c_im_points, result.timings);
+        }
         if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI && settings.execution.mpi_size > 1) {
             auto reduce_start = Clock::now();
             mpi_allreduce_sum_in_place(result.sigma_c_im_points.data());
