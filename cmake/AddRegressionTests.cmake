@@ -430,6 +430,53 @@ function(gw_add_h2o_cosma_test)
     )
 endfunction()
 
+function(gw_add_h2o_cosma_cuda_test)
+    if(NOT GW_ENABLE_MPI OR NOT GW_ENABLE_SCALAPACK OR NOT GW_ENABLE_COSMA OR NOT GW_ENABLE_CUDA)
+        return()
+    endif()
+
+    set(test_dir "${GW_REGRESSION_OUTPUT_ROOT}/h2o_cosma_cuda")
+    set(labels "mpi;cuda;cosma")
+
+    add_test(
+        NAME cosma_cuda_h2o_reference_run
+        COMMAND
+            ${CMAKE_COMMAND} -E make_directory "${test_dir}"
+    )
+
+    add_test(
+        NAME cosma_cuda_h2o_reference_compute
+        COMMAND
+            ${CMAKE_COMMAND} -E env
+            OMP_NUM_THREADS=1
+            OPENBLAS_NUM_THREADS=1
+            ${GW_TEST_MPI_LAUNCHER}
+            ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
+            $<TARGET_FILE:gw>
+            --input-dir "${GW_REFERENCE_H2O_DIR}"
+            --freq-points 200
+            --pade-params 16
+            --state 5
+            --output-dir "${test_dir}"
+            --frequency-parallel mpi
+            --linalg-backend cosma
+    )
+
+    set_tests_properties(cosma_cuda_h2o_reference_compute
+        PROPERTIES
+            PROCESSORS 4
+            RESOURCE_LOCK gpu
+            DEPENDS cosma_cuda_h2o_reference_run
+    )
+
+    set_tests_properties(
+        cosma_cuda_h2o_reference_run
+        cosma_cuda_h2o_reference_compute
+        PROPERTIES
+            LABELS "${labels}"
+    )
+endfunction()
+
 function(gw_add_h2o_cublas_serial_test)
     if(NOT GW_ENABLE_CUDA)
         return()
@@ -565,5 +612,6 @@ gw_add_h2o_blas_lapack_test()
 gw_add_h2o_mpi_blas_lapack_test()
 gw_add_h2o_scalapack_test()
 gw_add_h2o_cosma_test()
+gw_add_h2o_cosma_cuda_test()
 gw_add_h2o_cublas_serial_test()
 gw_add_h2o_cublas_mpi_test()

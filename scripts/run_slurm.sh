@@ -32,26 +32,33 @@ export OMP_PLACES=cores
 
 : > ../slurm.log
 
+echo "[$(date)] build finished" | tee -a ../slurm.log
+
+echo " " | tee -a ../slurm.log
 echo "== serial CPU ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 ctest -L "serial" -LE "cuda|lapack|mpi" -j1 --output-on-failure | tee -a ../slurm.log
 
+echo " " | tee -a ../slurm.log
 echo "== BLAS/LAPACK serial ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=4
 export OPENBLAS_NUM_THREADS=4
-ctest -L "lapack" -j1 --output-on-failure | tee -a ../slurm.log
+ctest -L "lapack"  -LE "scalapack" -j1 --output-on-failure | tee -a ../slurm.log
 
+echo " " | tee -a ../slurm.log
 echo "== MPI CPU ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 ctest -L "mpi" -LE "cuda" -j1 --output-on-failure | tee -a ../slurm.log
 
+echo " " | tee -a ../slurm.log
 echo "== CUDA serial ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 ctest -L "cuda" -LE "mpi" -j1 --output-on-failure | tee -a ../slurm.log
 
+echo " " | tee -a ../slurm.log
 echo "== CUDA MPI ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
