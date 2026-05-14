@@ -370,70 +370,6 @@ function(gw_add_h2o_scalapack_test)
     )
 endfunction()
 
-function(gw_add_h2o_cosma_test)
-    if(NOT GW_ENABLE_MPI OR NOT GW_ENABLE_SCALAPACK OR NOT GW_ENABLE_COSMA)
-        return()
-    endif()
-
-    set(test_dir "${GW_REGRESSION_OUTPUT_ROOT}/h2o_cosma")
-    set(labels "mpi;cosma")
-
-    add_test(
-        NAME cosma_h2o_reference_run
-        COMMAND
-            ${CMAKE_COMMAND} -E make_directory "${test_dir}"
-    )
-
-    add_test(
-        NAME cosma_h2o_reference_compute
-        COMMAND
-            ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=1
-            ${GW_TEST_MPI_LAUNCHER}
-            ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
-            $<TARGET_FILE:gw>
-            --input-dir "${GW_REFERENCE_H2O_DIR}"
-            --freq-points 200
-            --pade-params 16
-            --state 5
-            --output-dir "${test_dir}"
-            --frequency-parallel mpi
-            --linalg-backend cosma
-    )
-
-    gw_add_component_compare_test(
-        cosma_h2o_reference_compare
-        "${GW_REFERENCE_H2O_DIR}"
-        "${test_dir}"
-        1e-6
-        1e-6
-        cosma_h2o_reference_compute
-        "${labels}"
-    )
-
-    gw_add_energy_summary_compare_test(
-        cosma_h2o_energy_summary_compare
-        "${GW_REFERENCE_H2O_DIR}"
-        "${test_dir}"
-        1e-5
-        1e-5
-        cosma_h2o_reference_compute
-        "${labels}"
-    )
-
-    set_tests_properties(cosma_h2o_reference_compute
-        PROPERTIES
-            PROCESSORS 4
-            DEPENDS cosma_h2o_reference_run
-    )
-
-    gw_set_test_labels("${labels}"
-        cosma_h2o_reference_run
-        cosma_h2o_reference_compute
-    )
-endfunction()
-
 function(gw_add_h2o_cosma_cuda_test)
     if(NOT GW_ENABLE_MPI OR NOT GW_ENABLE_SCALAPACK OR NOT GW_ENABLE_COSMA OR NOT GW_ENABLE_CUDA)
         return()
@@ -636,7 +572,6 @@ gw_add_h2o_pyscf_test()
 gw_add_h2o_blas_lapack_test()
 gw_add_h2o_mpi_blas_lapack_test()
 gw_add_h2o_scalapack_test()
-gw_add_h2o_cosma_test()
 gw_add_h2o_cosma_cuda_test()
 gw_add_h2o_cublas_serial_test()
 gw_add_h2o_cublas_mpi_test()

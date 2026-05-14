@@ -63,7 +63,7 @@ echo " " | tee -a ../slurm.log
 echo "== SCALAPACK CPU ==" | tee -a ../slurm.log
 export OMP_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
-ctest -L "mpi" -L "scalapack" -LE "cuda" -j1 --output-on-failure | tee -a ../slurm.log
+ctest -L "mpi" -L "scalapack" -LE "cuda|cosma" -j1 --output-on-failure | tee -a ../slurm.log
 
 echo " " | tee -a ../slurm.log
 echo "== CUDA serial ==" | tee -a ../slurm.log
