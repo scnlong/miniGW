@@ -8,7 +8,7 @@
 
 miniGW is a compact molecular G0W0 code written in modern C++20. It uses PySCF to generate the DFT starting-point data and reads the resulting molecular-orbital quantities from a single HDF5 input file.
 
-The code is intended as a development and experimentation platform for molecular GW workflows, linear-algebra backend integration, MPI frequency distribution, ScaLAPACK/COSMA distributed screening, and CUDA device-resident screening term prototypes.
+The code is intended as a development and experimentation platform for molecular GW workflows, linear-algebra backend integration, MPI frequency distribution, distributed ScaLAPACK/COSMA screening paths, and CUDA-accelerated GPU-resident screening workspaces.
 
 Resolution of the Identity (RI) / density fitting is not implemented. The current input format requires a full four-index MO-basis ERI tensor.
 
@@ -398,7 +398,7 @@ Single-rank CUDA run:
 
 ```bash
 ./build-cuda/gw \
-  --input-dir regression_tests/h2o_cuda \
+  --input-dir regression_tests/h2o_cublas_serial \
   --linalg-backend cublas \
   --frequency-parallel serial
 ```
@@ -407,7 +407,7 @@ MPI frequency distribution with CUDA is supported:
 
 ```bash
 mpirun -np 8 ./build-cuda/gw \
-  --input-dir regression_tests/h2o_serial \
+  --input-dir regression_tests/h2o_cublas_mpi \
   --linalg-backend cublas \
   --frequency-parallel mpi \
   --tasks-per-gpu 4
