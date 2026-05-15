@@ -1,6 +1,6 @@
-#include "gw/memory_footprint.hpp"
+#include "memory_footprint.hpp"
 
-#include "gw/types.hpp"
+#include "types.hpp"
 
 #include <iomanip>
 #include <initializer_list>

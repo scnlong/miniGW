@@ -1,7 +1,7 @@
-#include "gw/execution.hpp"
+#include "execution.hpp"
 
-#include "gw/cli.hpp"
-#include "gw/mpi_context.hpp"
+#include "cli.hpp"
+#include "mpi_context.hpp"
 
 #include <algorithm>
 #include <stdexcept>

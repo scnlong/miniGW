@@ -1,4 +1,4 @@
-#include "gw/workspace/device_pq_ph_panel.hpp"
+#include "workspace/device_pq_ph_panel.hpp"
 
 #include <cuda_runtime_api.h>
 #include <cuComplex.h>

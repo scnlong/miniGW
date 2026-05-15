@@ -1,4 +1,4 @@
-#include "gw/workspace/device_screening_workspace.hpp"
+#include "workspace/device_screening_workspace.hpp"
 
 #include <cublas_v2.h>
 #include <cuda_runtime_api.h>

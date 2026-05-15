@@ -1,4 +1,4 @@
-#include "gw/npy.hpp"
+#include "npy.hpp"
 
 #include <algorithm>
 #include <cctype>

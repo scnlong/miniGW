@@ -1,4 +1,4 @@
-#include "gw/workspace/distributed_screening_workspace.hpp"
+#include "workspace/distributed_screening_workspace.hpp"
 
 #include <stdexcept>
 

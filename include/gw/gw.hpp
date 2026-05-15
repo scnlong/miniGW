@@ -1,11 +1,11 @@
 #pragma once
 
-#include "gw/execution.hpp"
+#include "execution.hpp"
 #include "gw/integrals.hpp"
-#include "gw/linalg.hpp"
+#include "linalg/linalg.hpp"
 #include "gw/orbital_space.hpp"
 #include "gw/particle_hole.hpp"
-#include "gw/types.hpp"
+#include "types.hpp"
 
 #include <memory>
 #include <optional>

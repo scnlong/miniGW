@@ -1,4 +1,4 @@
-#include "gw/matrix/distributed_matrix.hpp"
+#include "matrix/distributed_matrix.hpp"
 
 #include <algorithm>
 #include <cmath>

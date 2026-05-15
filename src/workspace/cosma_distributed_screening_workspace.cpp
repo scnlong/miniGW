@@ -1,6 +1,6 @@
-#include "gw/workspace/cosma_distributed_screening_workspace.hpp"
+#include "workspace/cosma_distributed_screening_workspace.hpp"
 
-#include "gw/matrix/cosma_distributed_matrix.hpp"
+#include "matrix/cosma_distributed_matrix.hpp"
 
 #include <stdexcept>
 

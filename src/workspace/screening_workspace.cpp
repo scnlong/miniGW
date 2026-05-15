@@ -1,4 +1,4 @@
-#include "gw/workspace/screening_workspace.hpp"
+#include "workspace/screening_workspace.hpp"
 
 #include <atomic>
 #include <stdexcept>

@@ -1,4 +1,4 @@
-#include "gw/workspace/pq_ph_panel.hpp"
+#include "workspace/pq_ph_panel.hpp"
 
 #include <stdexcept>
 

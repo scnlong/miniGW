@@ -1,4 +1,4 @@
-#include "gw/matrix/cosma_distributed_matrix.hpp"
+#include "matrix/cosma_distributed_matrix.hpp"
 
 #include <stdexcept>
 #include <limits>

@@ -1,4 +1,4 @@
-#include "gw/profiling.hpp"
+#include "profiling.hpp"
 
 #include <iomanip>
 #include <iostream>

@@ -20,14 +20,14 @@ option(GW_ENABLE_TESTS "Enable CTest-based regression tests" ON)
 option(GW_ENABLE_PYSCF_TESTS "Enable PySCF-based regression tests" OFF)
 
 add_library(gwcore
-    src/backend_factory.cpp
+    src/linalg/backend_factory.cpp
     src/cli.cpp
     src/execution.cpp
-    src/frequency_grids.cpp
-    src/pade.cpp
+    src/gw/frequency_grids.cpp
+    src/gw/pade.cpp
     src/npy.cpp
-    src/linalg.cpp
-    src/gw.cpp
+    src/linalg/linalg.cpp
+    src/gw/gw.cpp
     src/io.cpp
     src/mpi_context.cpp
     src/memory_footprint.cpp
@@ -96,7 +96,7 @@ if(GW_ENABLE_BLAS_LAPACK)
     find_library(LAPACKE_LIBRARY lapacke REQUIRED)
 
     add_library(gw_linalg_blas_lapack
-        src/linalg_blas_lapack.cpp
+        src/linalg/linalg_blas_lapack.cpp
     )
 
     target_include_directories(gw_linalg_blas_lapack
@@ -305,7 +305,7 @@ if(GW_ENABLE_SCALAPACK)
     endif()
 
     add_library(gw_linalg_scalapack
-        src/linalg_scalapack.cpp
+        src/linalg/linalg_scalapack.cpp
         src/matrix/distributed_matrix.cpp
         src/workspace/distributed_screening_workspace.cpp
     )
@@ -329,7 +329,7 @@ if(GW_ENABLE_SCALAPACK)
 
     if(GW_ENABLE_COSMA)
         add_library(gw_linalg_cosma
-            src/linalg_cosma.cpp
+            src/linalg/linalg_cosma.cpp
             src/matrix/cosma_distributed_matrix.cpp
             src/workspace/cosma_distributed_screening_workspace.cpp
         )
@@ -364,7 +364,7 @@ if(GW_ENABLE_CUDA)
     find_package(CUDAToolkit REQUIRED)
 
     add_library(gw_linalg_cublas
-        src/linalg_cublas.cu
+        src/linalg/linalg_cublas.cu
         src/workspace/device_screening_workspace.cu
         src/workspace/device_pq_ph_panel.cu
     )

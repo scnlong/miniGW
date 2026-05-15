@@ -1,13 +1,13 @@
-#include "gw/backend_factory.hpp"
-#include "gw/cli.hpp"
-#include "gw/execution.hpp"
+#include "linalg/backend_factory.hpp"
+#include "cli.hpp"
+#include "execution.hpp"
 #include "gw/gw.hpp"
-#include "gw/io.hpp"
-#include "gw/memory_footprint.hpp"
-#include "gw/mpi_context.hpp"
-#include "gw/npy.hpp"
-#include "gw/profiling.hpp"
-#include "gw/types.hpp"
+#include "io.hpp"
+#include "memory_footprint.hpp"
+#include "mpi_context.hpp"
+#include "npy.hpp"
+#include "profiling.hpp"
+#include "types.hpp"
 
 #include <cstdlib>
 #include <fstream>

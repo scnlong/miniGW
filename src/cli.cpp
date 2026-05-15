@@ -1,4 +1,4 @@
-#include "gw/cli.hpp"
+#include "cli.hpp"
 
 #include <cstdlib>
 #include <filesystem>

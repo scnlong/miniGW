@@ -1,4 +1,4 @@
-#include "gw/mpi_context.hpp"
+#include "mpi_context.hpp"
 
 #include <stdexcept>
 
