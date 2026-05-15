@@ -12,6 +12,8 @@ The code is intended as a development and experimentation platform for molecular
 
 Resolution of the Identity (RI) / density fitting is not implemented. The current input format requires a full four-index MO-basis ERI tensor.
 
+The G0W0 method is a many-body perturbation theory approach in which quasiparticle excitation energies are obtained by evaluating the electronic self-energy Σ = iG0W0 from a non-interacting Green’s function G0 and a screened Coulomb interaction W0, typically starting from a density functional theory reference.
+
 ## Current scope
 
 Implemented components include:
@@ -428,7 +430,7 @@ The code separates several concerns that should remain independent as the projec
 - `include/workspace/screening_workspace.hpp`, `include/workspace/distributed_screening_workspace.hpp`, and `include/workspace/device_screening_workspace.hpp` own the dominant GW screening temporaries.
 - `include/workspace/pq_ph_panel.hpp` and `include/workspace/device_pq_ph_panel.hpp` provide panel views for the self-energy contraction without materializing the full `pq_ph` tensor.
 - `include/linalg/backend_factory.hpp` and `src/linalg/backend_factory.cpp` select the requested backend and validate that it is compatible with the chosen execution mode.
-- `src/gw/gw.cpp` contains the high-level \(G_0W_0\) workflow and should remain independent of backend-specific implementation details where possible.
+- `src/gw/gw.cpp` contains the high-level G0W0 workflow and should remain independent of backend-specific implementation details where possible.
 
 More detailed formulation and backend-interface notes are in:
 
