@@ -2,6 +2,7 @@
 
 #include "gw/sigma.hpp"
 #include "mpi_context.hpp"
+#include "runtime/kernel_policy.hpp"
 #include "workspace/pq_ph_panel.hpp"
 #include "workspace/screening_workspace.hpp"
 #ifdef GW_HAS_CUDA_BACKEND
@@ -17,7 +18,6 @@
 #endif
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
@@ -28,18 +28,6 @@ namespace gw {
 namespace {
 
 using Clock = std::chrono::steady_clock;
-
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-std::atomic_bool g_driver_openmp_kernel_loops_enabled{true};
-
-bool kernel_loops_enabled() noexcept {
-    return g_driver_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
-}
-#else
-bool kernel_loops_enabled() noexcept {
-    return false;
-}
-#endif
 
 double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
     return std::chrono::duration<double>(end - start).count();
@@ -52,7 +40,7 @@ bool root_rank(const GwSettings& settings) noexcept {
 MatrixComplex to_complex(const MatrixReal& in) {
     MatrixComplex out(in.rows(), in.cols(), Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < in.rows(); ++i) {
         for (std::size_t j = 0; j < in.cols(); ++j) {
@@ -61,6 +49,72 @@ MatrixComplex to_complex(const MatrixReal& in) {
     }
     return out;
 }
+
+class FrequencyProgressReporter {
+public:
+    explicit FrequencyProgressReporter(Clock::time_point start) : chunk_start_(start) {}
+
+    void report_host_serial(const GwSettings& settings, std::size_t f_n, std::size_t nfreq) {
+        if (!root_rank(settings) || ((f_n + 1) % 10 != 0 && f_n + 1 != nfreq)) {
+            return;
+        }
+        const auto now = Clock::now();
+        std::cout << "  completed frequency " << (f_n + 1) << " / " << nfreq
+                  << " in " << elapsed_seconds(chunk_start_, now) << " s\n";
+        chunk_start_ = now;
+    }
+
+#ifdef GW_HAS_CUDA_BACKEND
+    void report_cuda(const GwSettings& settings,
+                     std::size_t f_n,
+                     std::size_t nfreq,
+                     std::size_t local_completed,
+                     std::size_t local_total,
+                     bool mpi_frequency) {
+        if (root_rank(settings) && !mpi_frequency &&
+            ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
+            const auto now = Clock::now();
+            std::cout << "  completed CUDA device-resident frequency " << (f_n + 1) << " / "
+                      << nfreq << " in " << elapsed_seconds(chunk_start_, now) << " s\n";
+            chunk_start_ = now;
+            return;
+        }
+
+        if (mpi_frequency && (local_completed == local_total || local_completed % 10U == 0U)) {
+            const auto now = Clock::now();
+            std::cout << "  rank " << settings.execution.mpi_rank
+                      << " completed " << local_completed << " / " << local_total
+                      << " assigned CUDA frequencies on device " << settings.execution.cuda_device_id
+                      << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
+                      << elapsed_seconds(chunk_start_, now) << " s\n";
+            chunk_start_ = now;
+        }
+    }
+#endif
+
+#ifdef GW_HAS_SCALAPACK_BACKEND
+    void report_distributed(const GwSettings& settings,
+                            std::size_t group_id,
+                            std::size_t f_n,
+                            std::size_t local_completed,
+                            std::size_t local_total,
+                            bool group_root) {
+        if (!group_root || (local_completed != local_total && local_completed % 10U != 0U)) {
+            return;
+        }
+        const auto now = Clock::now();
+        std::cout << "  group " << group_id << " completed " << local_completed
+                  << " / " << local_total << " assigned distributed frequencies"
+                  << " (last global frequency " << (f_n + 1) << " / "
+                  << settings.num_freq_points_total << ") in "
+                  << elapsed_seconds(chunk_start_, now) << " s\n";
+        chunk_start_ = now;
+    }
+#endif
+
+private:
+    Clock::time_point chunk_start_;
+};
 
 void compute_sigma_c_frequency(std::size_t f_n,
                                const OrbitalSpace& orbitals,
@@ -187,7 +241,7 @@ void compute_sigma_c_device_screening(const OrbitalSpace& orbitals,
         : nfreq;
     std::size_t local_completed = 0;
 
-    auto chunk_start = Clock::now();
+    FrequencyProgressReporter progress(Clock::now());
     for (std::size_t f_n = mpi_frequency ? rank : 0; f_n < nfreq; f_n += (mpi_frequency ? size : 1U)) {
         compute_sigma_c_frequency_device(f_n,
                                          orbitals,
@@ -201,21 +255,7 @@ void compute_sigma_c_device_screening(const OrbitalSpace& orbitals,
                                          sigma_c_im_points,
                                          timings);
         ++local_completed;
-        if (root_rank(settings) && !mpi_frequency &&
-            ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
-            const auto now = Clock::now();
-            std::cout << "  completed CUDA device-resident frequency " << (f_n + 1) << " / "
-                      << nfreq << " in " << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
-        } else if (mpi_frequency && (local_completed == local_total || local_completed % 10U == 0U)) {
-            const auto now = Clock::now();
-            std::cout << "  rank " << settings.execution.mpi_rank
-                      << " completed " << local_completed << " / " << local_total
-                      << " assigned CUDA frequencies on device " << settings.execution.cuda_device_id
-                      << " (last global frequency " << (f_n + 1) << " / " << nfreq << ") in "
-                      << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
-        }
+        progress.report_cuda(settings, f_n, nfreq, local_completed, local_total, mpi_frequency);
     }
 }
 #endif
@@ -303,7 +343,7 @@ void compute_sigma_c_distributed_screening(const OrbitalSpace& orbitals,
             ? ((settings.num_freq_points_total - 1U - group_id) / num_groups + 1U)
             : 0U;
 
-    auto chunk_start = Clock::now();
+    FrequencyProgressReporter progress(Clock::now());
     for (std::size_t f_n = group_id;
          f_n < settings.num_freq_points_total;
          f_n += num_groups) {
@@ -320,17 +360,7 @@ void compute_sigma_c_distributed_screening(const OrbitalSpace& orbitals,
                                               timings);
 
         ++local_completed;
-        const bool print_progress =
-            group_root && (local_completed == local_total || local_completed % 10U == 0U);
-        if (print_progress) {
-            const auto now = Clock::now();
-            std::cout << "  group " << group_id << " completed " << local_completed
-                      << " / " << local_total << " assigned distributed frequencies"
-                      << " (last global frequency " << (f_n + 1) << " / "
-                      << settings.num_freq_points_total << ") in "
-                      << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
-        }
+        progress.report_distributed(settings, group_id, f_n, local_completed, local_total, group_root);
     }
 }
 #endif
@@ -350,7 +380,7 @@ void compute_sigma_c_serial_or_mpi(const OrbitalSpace& orbitals,
     const std::size_t size = settings.execution.mpi_size;
     const bool mpi_frequency = settings.execution.frequency_parallel_mode == FrequencyParallelMode::MPI;
 
-    auto chunk_start = Clock::now();
+    FrequencyProgressReporter progress(Clock::now());
     for (std::size_t f_n = mpi_frequency ? rank : 0; f_n < nfreq; f_n += (mpi_frequency ? size : 1)) {
         compute_sigma_c_frequency(f_n,
                                   orbitals,
@@ -364,11 +394,8 @@ void compute_sigma_c_serial_or_mpi(const OrbitalSpace& orbitals,
                                   sigma_c_im_points,
                                   timings);
 
-        if (root_rank(settings) && !mpi_frequency && ((f_n + 1) % 10 == 0 || f_n + 1 == nfreq)) {
-            const auto now = Clock::now();
-            std::cout << "  completed frequency " << (f_n + 1) << " / " << nfreq
-                      << " in " << elapsed_seconds(chunk_start, now) << " s\n";
-            chunk_start = now;
+        if (!mpi_frequency) {
+            progress.report_host_serial(settings, f_n, nfreq);
         }
     }
 }
@@ -431,9 +458,7 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
                                   const linalg::Backend& linalg_backend,
                                   MatrixComplex& sigma_c_im_points,
                                   GwTimings& timings) {
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-    g_driver_openmp_kernel_loops_enabled.store(settings.execution.openmp_kernel_loops, std::memory_order_relaxed);
-#endif
+    runtime::set_openmp_kernel_loops_enabled(settings.execution.openmp_kernel_loops);
 
     const auto caps = linalg_backend.capabilities();
     const workspace::PqPhPanelView pq_ph_view(integrals, ph_basis);

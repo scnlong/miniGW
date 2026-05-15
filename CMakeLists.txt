@@ -35,6 +35,7 @@ add_library(gwcore
     src/mpi_context.cpp
     src/memory_footprint.cpp
     src/profiling.cpp
+    src/runtime/kernel_policy.cpp
     src/workspace/screening_workspace.cpp
     src/workspace/pq_ph_panel.cpp
 )

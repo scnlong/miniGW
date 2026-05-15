@@ -1,31 +1,13 @@
 #include "workspace/screening_workspace.hpp"
 
-#include <atomic>
+#include "runtime/kernel_policy.hpp"
+
 #include <stdexcept>
 
 namespace gw::workspace {
-namespace {
-
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-std::atomic_bool g_screening_openmp_kernel_loops_enabled{true};
-
-bool kernel_loops_enabled() noexcept {
-    return g_screening_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
-}
-#else
-bool kernel_loops_enabled() noexcept {
-    return false;
-}
-#endif
-
-} // namespace
 
 void set_host_screening_openmp_kernel_loops(bool enabled) noexcept {
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-    g_screening_openmp_kernel_loops_enabled.store(enabled, std::memory_order_relaxed);
-#else
-    (void)enabled;
-#endif
+    runtime::set_openmp_kernel_loops_enabled(enabled);
 }
 
 HostScreeningWorkspace::HostScreeningWorkspace(MatrixReal v_ph,
@@ -48,7 +30,7 @@ MatrixComplex HostScreeningWorkspace::compute_w_c(const std::vector<Complex>& pi
 
     MatrixComplex epsilon(n, n, Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t k = 0; k < n; ++k) {
@@ -56,7 +38,7 @@ MatrixComplex HostScreeningWorkspace::compute_w_c(const std::vector<Complex>& pi
         }
     }
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         epsilon(i, i) += Complex{1.0, 0.0};
@@ -64,7 +46,7 @@ MatrixComplex HostScreeningWorkspace::compute_w_c(const std::vector<Complex>& pi
 
     MatrixComplex inv_eps = backend_.inverse(epsilon);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         inv_eps(i, i) -= Complex{1.0, 0.0};
@@ -84,7 +66,7 @@ std::vector<Complex> HostScreeningWorkspace::quadratic_forms_panel(const MatrixC
     const std::size_t nvec = x_panel.cols();
     MatrixComplex x_complex(n, nvec, Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t j = 0; j < nvec; ++j) {
@@ -97,7 +79,7 @@ std::vector<Complex> HostScreeningWorkspace::quadratic_forms_panel(const MatrixC
                                           linalg::MatrixTranspose::NoTranspose);
     std::vector<Complex> values(nvec, Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t j = 0; j < nvec; ++j) {
         Complex sum{0.0, 0.0};

@@ -1,22 +1,11 @@
 #include "gw/sigma.hpp"
 
-#include <atomic>
+#include "runtime/kernel_policy.hpp"
+
 #include <stdexcept>
 
 namespace gw {
 namespace {
-
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-std::atomic_bool g_sigma_openmp_kernel_loops_enabled{true};
-
-bool kernel_loops_enabled() noexcept {
-    return g_sigma_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
-}
-#else
-bool kernel_loops_enabled() noexcept {
-    return false;
-}
-#endif
 
 void validate_input_shapes(const OrbitalSpace& orbitals, const MolecularIntegrals& integrals) {
     if (integrals.nmo() != orbitals.nmo()) {
@@ -27,11 +16,7 @@ void validate_input_shapes(const OrbitalSpace& orbitals, const MolecularIntegral
 } // namespace
 
 void set_sigma_openmp_kernel_loops(bool enabled) noexcept {
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-    g_sigma_openmp_kernel_loops_enabled.store(enabled, std::memory_order_relaxed);
-#else
-    (void)enabled;
-#endif
+    runtime::set_openmp_kernel_loops_enabled(enabled);
 }
 
 MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularIntegrals& integrals) {
@@ -39,7 +24,7 @@ MatrixReal calculate_exchange(const OrbitalSpace& orbitals, const MolecularInteg
 
     MatrixReal sigma_x(orbitals.nmo(), orbitals.nmo(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t q = 0; q < orbitals.nmo(); ++q) {
         for (std::size_t p = 0; p < orbitals.nmo(); ++p) {
@@ -57,7 +42,7 @@ std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasi
     std::vector<Complex> diag(ph_basis.size());
     const Complex ieta{0.0, eta};
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t ph = 0; ph < ph_basis.size(); ++ph) {
         const ParticleHolePair& ia = ph_basis[ph];
@@ -71,7 +56,7 @@ std::vector<Complex> calculate_pi0_ph_diag(Complex omega, const ParticleHoleBasi
 MatrixReal calculate_v_ph_matrix(const MolecularIntegrals& integrals, const ParticleHoleBasis& ph_basis) {
     MatrixReal v_ph(ph_basis.size(), ph_basis.size(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t ph_ia = 0; ph_ia < ph_basis.size(); ++ph_ia) {
         for (std::size_t ph_jb = 0; ph_jb < ph_basis.size(); ++ph_jb) {
@@ -96,7 +81,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
 
     MatrixComplex epsilon(n, n, Complex{0.0, 0.0});
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         for (std::size_t k = 0; k < n; ++k) {
@@ -104,7 +89,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
         }
     }
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         epsilon(i, i) += Complex{1.0, 0.0};
@@ -112,7 +97,7 @@ MatrixComplex calculate_w_0_c_matrix(const MatrixReal& v_ph,
 
     MatrixComplex inv_eps = backend.inverse(epsilon);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < n; ++i) {
         inv_eps(i, i) -= Complex{1.0, 0.0};
@@ -126,7 +111,7 @@ Tensor3Real calculate_pq_ph_matrix(const MolecularIntegrals& integrals, const Pa
     const std::size_t nmo = integrals.nmo();
     Tensor3Real out(nmo, nmo, ph_basis.size(), 0.0);
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(3) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(3) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t ph = 0; ph < ph_basis.size(); ++ph) {
         for (std::size_t q = 0; q < nmo; ++q) {

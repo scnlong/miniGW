@@ -1,31 +1,13 @@
 #include "workspace/pq_ph_panel.hpp"
 
-#include <atomic>
+#include "runtime/kernel_policy.hpp"
+
 #include <stdexcept>
 
 namespace gw::workspace {
-namespace {
-
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-std::atomic_bool g_pq_ph_panel_openmp_kernel_loops_enabled{true};
-
-bool kernel_loops_enabled() noexcept {
-    return g_pq_ph_panel_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
-}
-#else
-bool kernel_loops_enabled() noexcept {
-    return false;
-}
-#endif
-
-} // namespace
 
 void set_pq_ph_panel_openmp_kernel_loops(bool enabled) noexcept {
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-    g_pq_ph_panel_openmp_kernel_loops_enabled.store(enabled, std::memory_order_relaxed);
-#else
-    (void)enabled;
-#endif
+    runtime::set_openmp_kernel_loops_enabled(enabled);
 }
 
 PqPhPanelView::PqPhPanelView(const MolecularIntegrals& integrals,
@@ -54,7 +36,7 @@ void PqPhPanelView::fill_panel(std::size_t p_index,
     }
 
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for collapse(2) schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for collapse(2) schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t ph = 0; ph < ph_basis_.size(); ++ph) {
         for (std::size_t kk = 0; kk < panel.cols(); ++kk) {

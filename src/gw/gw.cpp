@@ -4,10 +4,8 @@
 #include "gw/qp_solver.hpp"
 #include "gw/sigma.hpp"
 #include "gw/sigma_c_driver.hpp"
-#include "workspace/pq_ph_panel.hpp"
-#include "workspace/screening_workspace.hpp"
+#include "runtime/kernel_policy.hpp"
 
-#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
@@ -18,18 +16,6 @@ namespace gw {
 namespace {
 
 using Clock = std::chrono::steady_clock;
-
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-std::atomic_bool g_openmp_kernel_loops_enabled{true};
-
-bool kernel_loops_enabled() noexcept {
-    return g_openmp_kernel_loops_enabled.load(std::memory_order_relaxed);
-}
-#else
-bool kernel_loops_enabled() noexcept {
-    return false;
-}
-#endif
 
 double elapsed_seconds(Clock::time_point start, Clock::time_point end) {
     return std::chrono::duration<double>(end - start).count();
@@ -60,20 +46,13 @@ void validate_input_shapes(const OrbitalSpace& orbitals, const MolecularIntegral
 }
 
 void configure_runtime_kernel_loops(bool enabled) noexcept {
-#if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-    g_openmp_kernel_loops_enabled.store(enabled, std::memory_order_relaxed);
-    set_sigma_openmp_kernel_loops(enabled);
-    workspace::set_host_screening_openmp_kernel_loops(enabled);
-    workspace::set_pq_ph_panel_openmp_kernel_loops(enabled);
-#else
-    (void)enabled;
-#endif
+    runtime::set_openmp_kernel_loops_enabled(enabled);
 }
 
 std::vector<Complex> make_imaginary_frequency_grid(const std::vector<double>& omegas) {
     std::vector<Complex> omega_im(omegas.size());
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
-#pragma omp parallel for schedule(static) if(kernel_loops_enabled())
+#pragma omp parallel for schedule(static) if(runtime::openmp_kernel_loops_enabled())
 #endif
     for (std::size_t i = 0; i < omegas.size(); ++i) {
         omega_im[i] = Complex{0.0, omegas[i]};
