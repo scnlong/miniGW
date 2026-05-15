@@ -186,7 +186,7 @@ Basic run:
 Useful options:
 
 ```text
---input-dir PATH              Directory containing pyscf_g0w0_input.h5
+--input-dir PATH              Directory containing gw_input.h5
 --output-dir PATH             Directory for E_c_before_Pade.out, E_c.out, and gw.out
 --freq-points N               Number of imaginary-frequency points
 --pade-params N               Number of Padé parameters

@@ -3,6 +3,7 @@ from typing import List
 from pyscf import gto, dft, ao2mo
 from collections import defaultdict
 from math import ceil
+import h5py
 import sys
 
 # Define conversion factor from Hartree to eV
@@ -147,7 +148,7 @@ eri_mo_chemist = eri_mo_chemist.reshape(nmo, nmo, nmo, nmo)
 # (pq|rs) means integral over (p(1)q(1) | r(2)s(2))
 # This involves transposing the second and third indices: (p, r, q, s) -> (p, q, r, s)
 # So, eri_mo[p,q,r,s] = eri_mo_chemist[p,r,q,s]
-#eri_mo = np.transpose(eri_mo_chemist, (0, 2, 1, 3))
+# eri_mo = np.transpose(eri_mo_chemist, (0, 2, 1, 3))
 eri_mo = eri_mo_chemist
 
 print(f"Shape of ERI in MO basis (physicist's notation): {eri_mo.shape}")

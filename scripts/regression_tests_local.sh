@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 rm -rf build
@@ -23,8 +24,8 @@ ctest -L "serial" -LE "cuda|lapack|mpi|scalapack|cosma" -j1 --output-on-failure 
 
 echo " " | tee -a ../regression_tests.log
 echo "== BLAS/LAPACK serial ==" | tee -a ../regression_tests.log
-export OMP_NUM_THREADS=4
-export OPENBLAS_NUM_THREADS=4
+export OMP_NUM_THREADS="${GW_TEST_MPI_RANKS:-4}"
+export OPENBLAS_NUM_THREADS="${GW_TEST_MPI_RANKS:-4}"
 ctest -L "lapack"  -LE "scalapack" -j1 --output-on-failure | tee -a ../regression_tests.log
 
 echo " " | tee -a ../regression_tests.log

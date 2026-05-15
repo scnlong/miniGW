@@ -42,9 +42,10 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
 
     if (cli.linalg_backend == "cosma") {
 #ifdef GW_HAS_COSMA_BACKEND
-        // COSMA is used through its prefixed ScaLAPACK-compatible pxgemm ABI.
-        // The distributed code path remains host/block-cyclic, but GEMM is
-        // explicitly routed to cosma_pzgemm_ instead of ordinary pzgemm_.
+        // COSMA is called through its prefixed PBLAS-compatible ABI. miniGW keeps the
+        // ScaLAPACK-style distributed matrix descriptors on its side, while COSMA may
+        // execute the distributed GEMM through its GPU-enabled runtime stack depending
+        // on the linked COSMA build and runtime environment.
         return linalg::make_cosma_pxgemm_backend();
 #else
         throw std::runtime_error(

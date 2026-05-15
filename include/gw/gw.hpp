@@ -37,10 +37,8 @@ struct GwSettings {
 
     ExecutionPolicy execution{};
 
-    // The default backend is a serial reference implementation. Optimized
-    // local CPU, distributed MPI, and accelerator backends implement the same
-    // interface initially, but true ScaLAPACK/COSMA/GPU performance requires
-    // distributed/device-resident matrix abstractions in later layers.
+	// Fallback backend used when GwSettings is constructed directly in tests.
+    // The executable normally overwrites this from the CLI/backend factory.
     std::shared_ptr<const linalg::Backend> linalg_backend{linalg::make_reference_backend()};
 };
 
