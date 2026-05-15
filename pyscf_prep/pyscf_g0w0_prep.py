@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List
-from pyscf import gto, scf, dft, ao2mo
+from pyscf import gto, dft, ao2mo
 from collections import defaultdict
 from math import ceil
 import sys
@@ -34,7 +34,7 @@ def pyscf_to_fhi_aims_gaussian_format(atom_symbol: str, pyscf_basis: List) -> st
                 lines.append(f"  {i[0]:.10f}   {i[1]:.10f}")
     return "\n".join(lines)
 
-with open ("pyscf_basis_to_aims.txt", "w") as f:
+with open("pyscf_basis_to_aims.txt", "w") as f:
     all_atom_symbols = []
     for i in range(mol.natm):
         all_atom_symbols.append(mol.atom_symbol(i))
@@ -45,7 +45,7 @@ with open ("pyscf_basis_to_aims.txt", "w") as f:
         f.write(f"Element: {i} \n")
         f.write("pure_gauss .true.\n")
         f.write(pyscf_to_fhi_aims_gaussian_format(i, basis_data)+"\n")
-        f.write(f"\n")
+        f.write("\n")
 
 # --- 3. Perform a Restricted Kohn-Sham (RKS) DFT calculation ---
 # Using PBE functional
@@ -57,8 +57,7 @@ mf.kernel()
 if mf.converged:
     print("DFT calculation converged successfully.")
 else:
-    print("DFT calculation did NOT converge.")
-    exit()
+    raise RuntimeError("DFT calculation did not converge")
 
 # --- 4. Extract eigenvalues (orbital energies) and eigenvectors (MO coefficients) ---
 mo_energy = mf.mo_energy # Kohn-Sham orbital energies
@@ -78,7 +77,7 @@ nsaos_lines=ceil(nmo / 4)
 
 # Write to Turbomole-style mos file
 with open("mos", "w") as f:
-    f.write(f"$scfmo   expanded   format(4d20.14)\n")
+    f.write("$scfmo   expanded   format(4d20.14)\n")
     for iorb in range(nmo):
         eigval = mo_energy[iorb]
         if eigval >= 0:
@@ -167,23 +166,21 @@ vxc_mo = np.dot(mo_coeff.T, np.dot(vxc_ao, mo_coeff))
 print(f"Shape of Vxc in MO basis: {vxc_mo.shape}")
 
 
-# --- 9. Save the extracted data to files ---
-output_dir = "./" # Current directory
-np.save(f"{output_dir}mo_energy.npy", mo_energy)
-#np.save(f"{output_dir}mo_coeff.npy", mo_coeff)
-#np.save(f"{output_dir}mo_overlap.npy", mo_overlap) # overlap matrix of MOs
-np.save(f"{output_dir}eri_mo.npy", eri_mo)
-np.save(f"{output_dir}vxc_mo.npy", vxc_mo) # Save Vxc in MO basis
-with open(f"{output_dir}fermi_energy.txt", "w") as f:
-    f.write(str(fermi_energy))
-with open(f"{output_dir}nocc.txt", "w") as f:
-    f.write(str(nocc))
+# --- 9. Save the extracted data to one HDF5 file ---
+output_path = "gw_input.h5"
+
+# Store all arrays in C-order float64 layout, matching miniGW's row-major Matrix/Tensor classes.
+with h5py.File(output_path, "w") as h5:
+    h5.attrs["format"] = "miniGW PySCF G0W0 input"
+    h5.attrs["format_version"] = 1
+    h5.attrs["energy_unit"] = "Hartree"
+    h5.attrs["nocc"] = np.int64(nocc)
+    h5.attrs["fermi_energy"] = np.float64(fermi_energy)
+    h5.create_dataset("mo_energy", data=np.asarray(mo_energy, dtype=np.float64), compression=None)
+    h5.create_dataset("eri_mo", data=np.ascontiguousarray(eri_mo, dtype=np.float64), compression=None)
+    h5.create_dataset("vxc_mo", data=np.ascontiguousarray(vxc_mo, dtype=np.float64), compression=None)
 
 print("\nData saved successfully:")
-print(f"- mo_energy.npy (orbital energies)")
-#print(f"- mo_coeff.npy (MO coefficients)")
-print(f"- eri_mo.npy (two-electron integrals in MO basis, physicist's notation)")
-print(f"- vxc_mo.npy (Vxc matrix in MO basis)")
-#print(f"- mo_overlap.npy (Overlap matrix in MO basis)")
-print(f"- fermi_energy.txt (Fermi energy)")
-print(f"- nocc.txt (Number of occupied orbitals)")
+print(f"- {output_path}")
+print("  datasets: /mo_energy, /eri_mo, /vxc_mo")
+print("  attributes: nocc, fermi_energy, energy_unit, format_version")

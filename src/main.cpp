@@ -5,7 +5,7 @@
 #include "io.hpp"
 #include "memory_footprint.hpp"
 #include "mpi_context.hpp"
-#include "npy.hpp"
+#include "hdf5_input.hpp"
 #include "profiling.hpp"
 #include "types.hpp"
 
@@ -40,12 +40,7 @@ int main(int argc, char** argv) {
 
 		// read inputs from PySCF
         const auto read_input_start = gw::ProfilingClock::now();
-        gw::GwInput input;
-        input.eri_mo = gw::read_tensor4_npy_f64(gw::join_path(cli.input_dir, "eri_mo.npy"));
-        input.mo_energy = gw::read_vector_npy_f64(gw::join_path(cli.input_dir, "mo_energy.npy"));
-        input.vxc_mo = gw::read_matrix_npy_f64(gw::join_path(cli.input_dir, "vxc_mo.npy"));
-        input.nocc = static_cast<std::size_t>(gw::read_int_text(gw::join_path(cli.input_dir, "nocc.txt")));
-        input.fermi_energy = gw::read_double_text(gw::join_path(cli.input_dir, "fermi_energy.txt"));
+        gw::GwInput input = gw::read_gw_input_hdf5(gw::join_path(cli.input_dir, "gw_input.h5"));
         const double read_input_seconds = gw::elapsed_seconds(read_input_start, gw::ProfilingClock::now());
 
         const std::size_t nmo = input.mo_energy.size();

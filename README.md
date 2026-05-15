@@ -6,7 +6,7 @@
 
 A compact molecular G0W0 code written in modern C++20, using PySCF as the DFT starting point.
 
-The project starts from a serial CPU implementation and a small self-contained `.npy` reader for importing PySCF-generated DFT data. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
+The project starts from a serial CPU implementation and reads PySCF-generated DFT data from a single HDF5 input file. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
 
 ## Scope
 
@@ -20,10 +20,12 @@ Implemented modules:
 - correlation self-energy on the imaginary axis;
 - continued-fraction Padé approximation;
 - iterative diagonal quasiparticle-energy update;
-- minimal NumPy `.npy` reader for little-endian `float64` arrays;
+- HDF5 reader for the single-file PySCF input bundle;
 - explicit dense linear-algebra backend boundary with a serial reference backend.
 
 ## Build
+
+HDF5 C development files are now a required dependency because miniGW reads PySCF input through the HDF5 C API.
 
 ```bash
 cmake -S . -B build -C cmake_install.cmake
@@ -32,17 +34,13 @@ cmake --build build -j 4
 
 ## Expected input files
 
-Run a pyscf DFT calculation (`pyscf_g0w0_prep.py` script from `pyscf_prep` directory) and its outputs contain:
+Run a PySCF DFT calculation with `pyscf_prep/pyscf_g0w0_prep.py`. It writes one input bundle:
 
 ```text
-eri_mo.npy
-mo_energy.npy
-vxc_mo.npy
-nocc.txt
-fermi_energy.txt
+pyscf_g0w0_input.h5
 ```
 
-The `.npy` reader currently supports C-order, little-endian `float64` arrays only.
+The HDF5 file contains datasets `/mo_energy`, `/eri_mo`, and `/vxc_mo`. The scalar values `nocc` and `fermi_energy` are stored as file attributes. Energies are in Hartree. Arrays are written as C-order `float64` data, matching miniGW's row-major containers.
 
 ## Run
 

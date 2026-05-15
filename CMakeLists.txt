@@ -25,7 +25,7 @@ add_library(gwcore
     src/execution.cpp
     src/gw/frequency_grids.cpp
     src/gw/pade.cpp
-    src/npy.cpp
+    src/hdf5_input.cpp
     src/linalg/linalg.cpp
     src/gw/gw.cpp
     src/io.cpp
@@ -37,6 +37,9 @@ add_library(gwcore
 )
 
 target_include_directories(gwcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+find_package(HDF5 REQUIRED COMPONENTS C)
+target_link_libraries(gwcore PUBLIC HDF5::HDF5)
 
 target_compile_options(gwcore PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Wconversion>

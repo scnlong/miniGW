@@ -11,7 +11,7 @@ namespace {
 void print_usage(const char* exe) {
     std::cerr << "Usage: " << exe << " [options]\n"
               << "Options:\n"
-              << "  --input-dir PATH             Directory containing eri_mo.npy, mo_energy.npy, vxc_mo.npy, nocc.txt, fermi_energy.txt\n"
+              << "  --input-dir PATH             Directory containing gw_input.h5\n"
               << "  --freq-points N              Number of imaginary-frequency points [default: 200]\n"
               << "  --pade-params N              Number of Pade parameters [default: 16]\n"
               << "  --state N                    1-based orbital index to calculate [default: 5]\n"

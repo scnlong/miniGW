@@ -26,7 +26,7 @@ public:
     [[nodiscard]] std::size_t nmo() const noexcept { return eri_mo_.dim0(); }
 
     [[nodiscard]] double eri(std::size_t p, std::size_t q, std::size_t r, std::size_t s) const {
-        // This returns the exact C-order payload read from eri_mo.npy.
+        // This returns the exact C-order payload read from /eri_mo in the HDF5 input file.
         // In this prototype it follows the same index order as the original Julia/NPZ implementation.
         return eri_mo_(p, q, r, s);
     }

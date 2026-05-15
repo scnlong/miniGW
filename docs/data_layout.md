@@ -23,7 +23,7 @@ The layout is C-order / row-major. For a rank-4 tensor, the offset is
 (((i * n1 + j) * n2 + k) * n3 + l)
 ```
 
-The `.npy` reader currently accepts only C-order little-endian `float64` arrays.
+PySCF data are read from one HDF5 file, `pyscf_g0w0_input.h5`. Array datasets are stored in C-order `float64` layout and are copied directly into these row-major containers.
 
 ## Orbital space
 
@@ -68,4 +68,4 @@ integrals.eri(p, q, r, s)
 integrals.vxc(p, q)
 ```
 
-The ERI accessor preserves the exact index order read from `eri_mo.npy`, matching the original Julia/NPZ implementation. The notation must still be verified against reference fixtures before using this as a production scientific implementation.
+The ERI accessor preserves the exact index order read from `/eri_mo` in `pyscf_g0w0_input.h5`, matching the original Julia/NPZ implementation. The notation must still be verified against reference fixtures before using this as a production scientific implementation.
