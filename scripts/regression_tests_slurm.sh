@@ -17,7 +17,7 @@ echo "[$(date)] SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-unset}"
 
 module --force purge
 module use "$OTHERSTAGES"
-module load Stages/2025 GCC/13.3.0 OpenMPI/5.0.5 ScaLAPACK/2.2.0-fb CMake/3.29.3 CUDA/12
+module load Stages/2025 GCC/13.3.0 OpenMPI/5.0.5 ScaLAPACK/2.2.0-fb CMake/3.29.3 HDF5/1.14.5 CUDA/12
 
 cd /e/home/jusers/liu21/jupiter/software/miniGW
 
