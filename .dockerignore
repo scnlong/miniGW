@@ -1,0 +1,11 @@
+.git
+build
+regression_tests.log
+**/__pycache__
+*.pyc
+*.o
+*.so
+*.a
+*.mod
+*.swp
+.DS_Store
