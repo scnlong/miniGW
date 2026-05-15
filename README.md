@@ -6,150 +6,310 @@
 
 # miniGW
 
-A compact molecular G0W0 code written in modern C++, using PySCF for generating DFT starting point.
+miniGW is a compact molecular \(G_0W_0\) code written in modern C++20. It uses PySCF to generate the DFT starting-point data and reads the resulting molecular-orbital quantities from a single HDF5 input file.
 
-The project starts from a serial CPU implementation and reads PySCF-generated DFT data from a single HDF5 input file. The GW workflow calls dense linear algebra through `linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
+The code is intended as a development and experimentation platform for molecular GW workflows, linear-algebra backend integration, MPI frequency distribution, ScaLAPACK/COSMA distributed screening, and CUDA device-resident screening term prototypes.
 
-N.B. Resolution of the Identity (RI) or density fitting is not supproted.
+Resolution of the Identity (RI) / density fitting is not implemented. The current input format requires a full four-index MO-basis ERI tensor.
 
-## Scope
+## Current scope
 
-Implemented modules:
+Implemented components include:
 
 - transformed Gauss-Legendre and linear frequency grids;
-- particle-hole index mapping;
-- bare exchange matrix in the MO basis;
+- occupied-virtual particle-hole index mapping;
+- bare exchange in the MO basis;
 - diagonal non-interacting polarizability in the particle-hole basis;
-- particle-hole Coulomb matrix and projected `(p,q,ph)` tensor;
+- particle-hole Coulomb matrix construction;
+- panel-based \(P_{pq,ia}\) contraction without materializing the full `pq_ph(nmo,nmo,nph)` tensor;
 - correlation self-energy on the imaginary axis;
-- continued-fraction Padé approximation;
+- continued-fraction Padé analytic continuation;
 - iterative diagonal quasiparticle-energy update;
-- HDF5 reader for the single-file PySCF input bundle;
-- Several dense linear-algebra backends.
+- HDF5 reader for the PySCF-generated single-file input bundle;
+- local reference and BLAS/LAPACK linear-algebra backends;
+- MPI frequency distribution;
+- ScaLAPACK distributed screening path;
+- COSMA GPU backend for multi-node multi-GPU distributed screening;
+- CUDA cuBLAS/cuSolver backend and CUDA device-resident screening workspace.
 
-## Required C++ build dependencies:
+## Repository layout
 
-Required dependencies:
+```text
+include/                 Public C++ headers
+src/                     C++ and CUDA implementation files
+cmake/                   CMake helper modules and regression-test registration
+pyscf_prep/              PySCF input-generation scripts
+regression_tests/        Reference H2O regression inputs and outputs
+scripts/                 Local, CI, and cluster regression-test helpers
+docs/                    Formulation and backend-interface notes
+.github/workflows/       GitHub Actions CI workflow
+```
 
-- C++20 compiler
-- CMake >= 3.21
-- HDF5 C development files
-- BLAS/LAPACK/LAPACKE if GW_ENABLE_BLAS_LAPACK=ON
-- MPI if GW_ENABLE_MPI=ON
-- ScaLAPACK if GW_ENABLE_SCALAPACK=ON
-- CUDA Toolkit if GW_ENABLE_CUDA=ON
+Important source areas:
 
-Required Python dependencies for PySCF input generation:
-- numpy
-- h5py
-- pyscf
+```text
+include/gw/              GW data structures and algorithm declarations
+include/linalg/          Linear-algebra backend interface and backend factories
+include/workspace/       Host, distributed, and device screening workspaces
+include/matrix/          Dense, distributed, and ownership-related matrix types
+src/gw/gw.cpp            Main G0W0 workflow
+src/hdf5_input.cpp       HDF5 input reader
+src/linalg/              Reference, BLAS/LAPACK, ScaLAPACK, COSMA, and CUDA backend code
+src/workspace/           Screening workspace implementations
+```
+
+## Dependencies
+
+miniGW always requires:
+
+- a C++20 compiler;
+- CMake >= 3.21;
+- HDF5 C development files.
+
+Optional C++/HPC dependencies:
+
+- OpenMP, if `GW_ENABLE_OPENMP=ON`;
+- BLAS, LAPACK, CBLAS, and LAPACKE, if `GW_ENABLE_BLAS_LAPACK=ON`;
+- MPI, if `GW_ENABLE_MPI=ON`;
+- ScaLAPACK/BLACS, if `GW_ENABLE_SCALAPACK=ON`;
+- COSMA with its GPU-enabled dependency stack, if `GW_ENABLE_COSMA=ON`;
+- CUDA Toolkit, cuBLAS, and cuSolver, if `GW_ENABLE_CUDA=ON`.
+
+Python dependencies are only needed for generating new PySCF input files:
+
+- `numpy`;
+- `h5py`;
+- `pyscf`.
+
+The C++ code does not require PySCF or `h5py` at build time if the HDF5 regression inputs already exist.
+
+On Ubuntu, a typical CPU/MPI development environment can be installed with:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential \
+  cmake \
+  gfortran \
+  pkg-config \
+  python3 \
+  libhdf5-dev \
+  libopenblas-dev \
+  liblapack-dev \
+  liblapacke-dev \
+  libopenmpi-dev \
+  openmpi-bin \
+  libscalapack-openmpi-dev
+```
 
 ## Build
 
-HDF5 C development files are now a required dependency because miniGW reads PySCF input through the HDF5 C API.
+A standard developer build using the repository CMake cache file is:
 
 ```bash
 cmake -S . -B build -C cmake_install.cmake
 cmake --build build -j 4
 ```
 
-## Expected input files
+The current default configuration enables several optional CPU/MPI backends. For a minimal reference-only build, use explicit switches:
 
-Run a PySCF DFT calculation with `pyscf_prep/pyscf_g0w0_prep.py`. It writes one input bundle:
+```bash
+cmake -S . -B build-reference \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DGW_ENABLE_TESTS=OFF \
+  -DGW_ENABLE_OPENMP=OFF \
+  -DGW_ENABLE_OPENMP_FREQUENCY_PARALLEL=OFF \
+  -DGW_ENABLE_MPI=OFF \
+  -DGW_ENABLE_BLAS_LAPACK=OFF \
+  -DGW_ENABLE_SCALAPACK=OFF \
+  -DGW_ENABLE_COSMA=OFF \
+  -DGW_ENABLE_CUDA=OFF
+
+cmake --build build-reference -j
+```
+
+When using this minimal build, run with the reference backend explicitly:
+
+```bash
+./build-reference/gw \
+  --input-dir regression_tests/h2o_serial \
+  --linalg-backend reference \
+  --frequency-parallel serial
+```
+
+## Input format
+
+Run the PySCF preparation script to generate the miniGW input bundle:
+
+```bash
+python3 pyscf_prep/pyscf_g0w0_prep.py
+```
+
+miniGW expects the input directory to contain:
 
 ```text
 gw_input.h5
 ```
 
-The HDF5 file contains datasets `/mo_energy`, `/eri_mo`, and `/vxc_mo`. The scalar values `nocc` and `fermi_energy` are stored as file attributes. Energies are in Hartree. Arrays are written as C-order `float64` data, matching miniGW's row-major containers.
+The HDF5 file contains the datasets:
+
+```text
+/mo_energy   shape: (nmo,)                float64
+/eri_mo      shape: (nmo,nmo,nmo,nmo)     float64
+/vxc_mo      shape: (nmo,nmo)             float64
+```
+
+and the file attributes:
+
+```text
+nocc          integer
+fermi_energy  float64
+```
+
+Energies are in Hartree. Arrays are written as C-order `float64` data and are read directly into miniGW's row-major containers.
 
 ## Run
 
-```bash
-./build/gw --input-dir /path/to/pyscf_output --freq-points 200 --pade-params 16 --state 5
-```
-
-Use `--help` to see complete options. 
-
-## Regression Tests
-
-Copy `scripts/regression_tests_local.sh` to the miniGW's root folder to run all regression test cases on your local machine. Or `/home/qliu/Software/miniGW/scripts/regression_tests_slurm.sh` if you works on HPC.
-
-## Linear algebra backends
-
-The default backend is `reference-serial`; it is intentionally simple and is meant for correctness and portability, not production performance. The current replacement boundary is documented in `docs/linalg_backend_interface.md`.
-
-CMake exposes preparation switches for vendor libraries:
+Basic run:
 
 ```bash
--DGW_ENABLE_BLAS_LAPACK=ON
--DGW_ENABLE_SCALAPACK=ON
--DGW_ENABLE_COSMA=ON
--DGW_ENABLE_CUDA=ON
+./build/gw \
+  --input-dir regression_tests/h2o_serial \
+  --freq-points 200 \
+  --pade-params 16 \
+  --state 5 \
+  --output-dir gw_output
 ```
 
-These switches only prepare/link the relevant vendor targets when available. The actual optimized backend classes should be added as separate implementations of `gw::linalg::Backend`.
+Useful options:
 
-## Architecture notes
+```text
+--input-dir PATH              Directory containing pyscf_g0w0_input.h5
+--output-dir PATH             Directory for E_c_before_Pade.out, E_c.out, and gw.out
+--freq-points N               Number of imaginary-frequency points
+--pade-params N               Number of Padé parameters
+--state N                     1-based orbital index
+--all-states                  Compute all diagonal states
+--linalg-backend NAME         reference, blas-lapack, scalapack, cosma, or cublas
+--frequency-parallel MODE     auto, serial, mpi, or openmp
+--kernel-parallel MODE        auto, serial, or openmp
+--contraction-panel-size N    Number of (p,k) vectors per Sigma_c contraction panel
+--scalapack-ranks-per-group N MPI ranks per ScaLAPACK communicator group
+--tasks-per-gpu N             MPI ranks sharing one visible GPU
+```
 
-The current code separates four concerns that should remain independent as the project grows:
-
-- **Execution policy** (`include/gw/execution.hpp`, `src/execution.cpp`) decides how frequency points and local kernels are scheduled: serial, OpenMP, or MPI frequency distribution.
-- **Data ownership** (`include/gw/matrix/ownership.hpp`) records whether data are replicated host arrays, future device-resident arrays, or future distributed block-cyclic arrays.
-- **Algorithm workspaces** (`include/gw/workspace/screening_workspace.hpp`, `src/workspace/screening_workspace.cpp`) own high-level GW temporaries such as `V_ph`, `inv(V_ph)`, `epsilon`, and `W_c`. The GW driver asks the workspace to compute `W_c` rather than directly managing all dense matrices.
-- **Specialized backends** are selected by `include/gw/backend_factory.hpp` and `src/backend_factory.cpp`. The current production path is a replicated local-host backend (`reference`, optionally `blas-lapack`). ScaLAPACK, COSMA, and cuBLAS/cuSolver are intentionally kept behind explicit backend boundaries because real implementations require distributed or device-resident matrix ownership rather than the current replicated `MatrixComplex` interface.
-
-Default builds use the reference backend and do not require MPI, OpenMP, or BLAS/LAPACK:
+See the complete command-line interface with:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF
-cmake --build build -j
+./build/gw --help
 ```
 
-OpenMP kernel loops can be enabled with:
+## Regression tests
+
+Regression tests are registered through CTest when `GW_ENABLE_TESTS=ON`.
+
+To list available tests:
 
 ```bash
-cmake -S . -B build-omp -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF -DGW_ENABLE_OPENMP=ON
-cmake --build build-omp -j
+ctest --test-dir build -N
 ```
 
-MPI frequency distribution requires an MPI C++ toolchain:
+To run all registered tests:
 
 ```bash
-cmake -S . -B build-mpi -DCMAKE_BUILD_TYPE=Release -DGW_ENABLE_TESTS=OFF -DGW_ENABLE_MPI=ON
-cmake --build build-mpi -j
-mpirun -np 4 ./build-mpi/gw --input-dir <input> --frequency-parallel mpi
+ctest --test-dir build --output-on-failure
 ```
 
-## Vendor linear-algebra backend status
+For the standard local build-and-regression workflow, run from the repository root:
 
-This version separates execution policy, data ownership, algorithm workspace, and backend families.  The default `reference` backend remains self-contained.  The optional vendor backends are intended for integration builds on systems where the corresponding HPC libraries are installed.
+```bash
+bash scripts/regression_tests_local.sh
+```
 
-### BLAS/LAPACK
+The regression script builds the code, runs selected serial, BLAS/LAPACK, MPI, and ScaLAPACK H2O tests, and writes a log file:
+
+```text
+regression_tests.log
+```
+
+The script uses `set -euo pipefail`, so any failed `ctest` command returns a non-zero exit code. This is the mechanism used by GitHub Actions to mark the build-and-regression workflow as failed.
+
+For GitHub CI with limited runner resources, the number of MPI ranks can be overridden with an environment variable if the script is written to use it:
+
+```bash
+GW_TEST_MPI_RANKS=4 bash scripts/regression_tests_local.sh
+```
+
+## Linear-algebra backends
+
+miniGW selects the dense linear-algebra implementation through `gw::linalg::Backend`.
+
+The command-line option is:
+
+```bash
+--linalg-backend reference
+--linalg-backend blas-lapack
+--linalg-backend scalapack
+--linalg-backend cosma
+--linalg-backend cublas
+```
+
+The command-line default is currently:
+
+```text
+blas-lapack
+```
+
+when the executable was built with `GW_ENABLE_BLAS_LAPACK=ON`.
+
+### Reference backend
+
+The reference backend is self-contained and intended for correctness testing and portability. It is not optimized for production performance.
+
+Example:
+
+```bash
+./build/gw \
+  --input-dir regression_tests/h2o_serial \
+  --linalg-backend reference \
+  --frequency-parallel serial
+```
+
+### BLAS/LAPACK backend
 
 `--linalg-backend blas-lapack` uses CBLAS/LAPACKE for replicated host matrices:
 
-- `cblas_zgemm` for dense complex GEMM,
-- `cblas_zgemv` for dense complex GEMV,
-- `LAPACKE_zgetrf` + `LAPACKE_zgetri` for the current inverse-based path.
+- `cblas_zgemm` for dense complex GEMM;
+- `cblas_zgemv` for dense complex GEMV;
+- `LAPACKE_zgetrf` and `LAPACKE_zgetri` for the current inverse-based path.
 
-Configure with, for example:
+Configure with:
 
 ```bash
 cmake -S . -B build-blas \
   -DCMAKE_BUILD_TYPE=Release \
   -DGW_ENABLE_BLAS_LAPACK=ON \
   -DBLA_VENDOR=OpenBLAS
+
+cmake --build build-blas -j
 ```
 
-### ScaLAPACK
+### MPI frequency distribution
 
-`--linalg-backend scalapack` is now a real ScaLAPACK call path, but still behind the current replicated `MatrixComplex` interface.  It redistributes replicated host matrices to a 2-D BLACS block-cyclic layout, calls ScaLAPACK, and gathers the result back to every rank.  It uses:
+MPI frequency distribution assigns different imaginary-frequency points to different MPI ranks and reduces the final self-energy columns.
 
-- `pzgetrf` + `pzgetrs` to compute the inverse by solving against the identity,
-- `pzgemm` for distributed GEMM.
+Example:
 
-This is useful for validating MPI/ScaLAPACK integration.  It is not yet the final production layout because the GW driver still materializes full `V_ph`, `pq_ph`, and `W_c` on each rank.
+```bash
+mpirun -np 4 ./build/gw \
+  --input-dir regression_tests/h2o_mpi \
+  --frequency-parallel mpi \
+  --linalg-backend blas-lapack
+```
+
+### ScaLAPACK backend
+
+`--linalg-backend scalapack` enables a distributed ScaLAPACK screening path. In this path, the dominant screening matrices such as `V_ph`, `epsilon`, and `W_c` are represented as BLACS block-cyclic distributed matrices inside `DistributedScreeningWorkspace`.
 
 Configure with:
 
@@ -159,46 +319,68 @@ cmake -S . -B build-scalapack \
   -DGW_ENABLE_MPI=ON \
   -DGW_ENABLE_SCALAPACK=ON \
   -DSCALAPACK_LIBRARIES="/path/to/libscalapack.so"
+
+cmake --build build-scalapack -j
 ```
 
-If `SCALAPACK_LIBRARIES` is omitted, CMake searches for a library named `scalapack`, `scalapack-openmpi`, or `scalapack-mpich`.
+If `SCALAPACK_LIBRARIES` is omitted, CMake searches for common ScaLAPACK library names such as `scalapack`, `scalapack-openmpi`, or `scalapack-mpich`.
 
-### COSMA
+All ranks can cooperate on every frequency point:
 
-COSMA is integrated through its ScaLAPACK-compatible `pxgemm` wrapper.  miniGW still calls the normal ScaLAPACK/PBLAS `pzgemm_` symbol; when `GW_ENABLE_COSMA=ON`, CMake links `libcosma_pxgemm`, `libcosma`, and `libcosta_scalapack` before the regular ScaLAPACK libraries so those `pzgemm_` calls are resolved by COSMA.  ScaLAPACK remains responsible for BLACS and for `pzgetrf_`/`pzgetrs_`.
+```bash
+mpirun -np 4 ./build-scalapack/gw \
+  --input-dir regression_tests/h2o_scalapack \
+  --frequency-parallel serial \
+  --linalg-backend scalapack
+```
 
-Configure after loading the COSMA and ScaLAPACK modules:
+Frequency batching with independent ScaLAPACK communicator groups is also supported:
+
+```bash
+mpirun -np 16 ./build-scalapack/gw \
+  --input-dir regression_tests/h2o_scalapack \
+  --frequency-parallel mpi \
+  --scalapack-ranks-per-group 4 \
+  --linalg-backend scalapack
+```
+
+In grouped mode, `MPI_COMM_WORLD` is split into frequency groups. Each group owns a BLACS/ScaLAPACK grid and processes one frequency point at a time; different groups process different frequency indices.
+
+The ERI tensor is still replicated in host memory. The current distributed path removes replicated ownership of the dominant `nph x nph` screening matrices, but a full distributed-memory GW implementation would still require distributed or tiled integral storage and contraction.
+
+### COSMA GPU backend
+
+In miniGW, `--linalg-backend cosma` is a GPU-oriented COSMA backend. It is not used as a CPU replacement for the ScaLAPACK backend. The CPU distributed-memory path is the ScaLAPACK backend; the COSMA backend is intended for multi-node multi-GPU distributed screening when miniGW is built against a GPU-enabled COSMA stack.
+
+Configure after loading suitable MPI, CUDA, COSMA, and required COSMA dependency modules:
 
 ```bash
 cmake -S . -B build-cosma \
   -DCMAKE_BUILD_TYPE=Release \
   -DGW_ENABLE_MPI=ON \
-  -DGW_ENABLE_SCALAPACK=ON \
   -DGW_ENABLE_COSMA=ON \
-  -DGW_ENABLE_CUDA=OFF
+  -DGW_ENABLE_CUDA=ON \
+  -DCOSMA_ROOT=/path/to/cosma
+
+cmake --build build-cosma -j
 ```
 
-Run either with the explicit COSMA alias or with the ScaLAPACK backend.  Both
-paths execute the same ScaLAPACK/PBLAS source code; the difference is only that
-`--linalg-backend cosma` requires a COSMA-enabled build and makes the requested
-mode explicit in user scripts:
+Run with multiple MPI ranks and visible GPUs, for example:
 
 ```bash
-mpirun -np 4 ./build-cosma/gw --linalg-backend cosma --frequency-parallel serial
-
-# Equivalent when the executable was built with -DGW_ENABLE_COSMA=ON:
-mpirun -np 4 ./build-cosma/gw --linalg-backend scalapack --frequency-parallel serial
+mpirun -np 8 ./build-cosma/gw \
+  --input-dir regression_tests/h2o_cosma \
+  --frequency-parallel mpi \
+  --linalg-backend cosma
 ```
 
-### cuBLAS/cuSolver
+For larger runs, the backend is intended to operate across multiple nodes and multiple GPUs, subject to the MPI launcher, GPU visibility, and the COSMA installation used on the target machine. The exact rank-to-GPU mapping and performance characteristics should be validated on the target cluster rather than inferred from the CPU ScaLAPACK backend.
 
-`--linalg-backend cublas` is now a real single-rank CUDA call path using host-wrapper semantics:
+### CUDA cuBLAS/cuSolver backend
 
-- `cublasZgemm` for GEMM,
-- `cublasZgemv` for GEMV,
-- `cusolverDnZgetrf` + `cusolverDnZgetrs` for inverse-by-solve.
+`--linalg-backend cublas` enables CUDA support when configured with `GW_ENABLE_CUDA=ON`.
 
-Inputs and outputs are still replicated host `MatrixComplex` objects.  Each call copies data to the device, performs the operation, and copies the result back.  This is suitable for correctness and incremental integration, but not yet the high-performance design.  The high-performance design should keep `V_ph`, `epsilon`, solver workspaces, and contraction buffers device-resident across frequency points.
+The lower-level CUDA backend provides cuBLAS/cuSolver wrappers for replicated host matrices. The main GW CUDA path additionally uses a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU.
 
 Configure with:
 
@@ -206,142 +388,61 @@ Configure with:
 cmake -S . -B build-cuda \
   -DCMAKE_BUILD_TYPE=Release \
   -DGW_ENABLE_CUDA=ON
+
+cmake --build build-cuda -j
 ```
 
-## ScaLAPACK distributed screening path
-
-The ScaLAPACK backend now has two layers:
-
-1. A legacy replicated-wrapper backend (`--linalg-backend scalapack`) for generic
-   `gw::linalg::Backend` calls. It redistributes a replicated host matrix to a
-   BLACS 2-D block-cyclic matrix, calls ScaLAPACK, and gathers the result.
-2. A GW-specific distributed screening path used by `run_g0w0()` when the
-   selected backend has distributed-MPI capabilities. In this path `V_ph`,
-   `epsilon`, `inv(V_ph)`, and `W_c` are owned as `DistributedMatrixComplex`
-   block-cyclic matrices inside `DistributedScreeningWorkspace`. The self-energy
-   contraction evaluates `p^T W_c p` by summing local `W_c` blocks and reducing
-   the scalar, so `W_c` is not gathered during the frequency loop.
-
-Build example:
+Single-rank CUDA run:
 
 ```bash
-cmake -S . -B build-scalapack \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DGW_ENABLE_MPI=ON \
-  -DGW_ENABLE_SCALAPACK=ON \
-  -DSCALAPACK_LIBRARIES="/path/to/libscalapack.so"
-cmake --build build-scalapack -j
+./build-cuda/gw \
+  --input-dir regression_tests/h2o_cuda \
+  --linalg-backend cublas \
+  --frequency-parallel serial
 ```
 
-Run examples:
-
-All ranks cooperate on every frequency point:
+MPI frequency distribution with CUDA is supported:
 
 ```bash
-mpirun -np 4 ./build-scalapack/gw \
+mpirun -np 8 ./build-cuda/gw \
   --input-dir regression_tests/h2o_serial \
-  --frequency-parallel serial \
-  --linalg-backend scalapack
-```
-
-Frequency batching with ScaLAPACK communicator groups:
-
-```bash
-mpirun -np 16 ./build-scalapack/gw \
-  --input-dir regression_tests/h2o_serial \
+  --linalg-backend cublas \
   --frequency-parallel mpi \
-  --scalapack-ranks-per-group 4 \
-  --linalg-backend scalapack
+  --tasks-per-gpu 4
 ```
 
-In the second mode, `MPI_COMM_WORLD` is split into independent frequency groups.
-Each group owns a BLACS/ScaLAPACK grid and collectively processes one frequency
-point at a time; different groups process different frequency indices.  The
-default is `--scalapack-ranks-per-group 4`.
-
-Remaining limitation: ERI and `pq_ph` are still replicated. The current step
-removes replicated ownership of the dominant `n_ph x n_ph` screening matrices;
-full distributed-memory GW still requires a distributed/tiled integral and
-self-energy contraction design.
-
-## Distributed panel contraction update
-
-The ScaLAPACK screening path now applies the screened interaction to a panel of
-particle-hole vectors as a distributed matrix multiplication.  For a panel
-`X = [x_1, ..., x_m]` with shape `n_ph x m`, the distributed path computes
+The mapping is local-rank based:
 
 ```text
-Y = W_c X
-q_j = x_j^T y_j
+device = (local_rank / tasks_per_gpu) % visible_device_count
 ```
 
-where `W_c`, `X`, and `Y` are represented as BLACS block-cyclic distributed
-matrices during the multiplication.  Only the final vector of scalar quadratic
-forms is reduced across MPI ranks.  The current implementation still assembles
-`X` from the replicated `pq_ph` tensor; the main `n_ph x n_ph` application is now
-performed by ScaLAPACK `pzgemm` rather than by a hand-written local block loop.
+The input ERI tensor remains replicated in host memory. CUDA contraction panels are provided by `DevicePqPhPanelView`, which either keeps the full ERI tensor resident on the GPU or streams only the requested panel through pinned host staging, depending on the selected storage mode and available device memory.
 
-## Current architecture note: panel-based `pq_ph` contraction
+## Architecture notes
 
-The self-energy contraction no longer materializes the full
-`pq_ph(nmo, nmo, n_ph)` tensor in the main GW workflow.  Instead, `gw::workspace::PqPhPanelView`
-generates panels on demand from the current `MolecularIntegrals` view:
+The code separates several concerns that should remain independent as the project grows:
+
+- `include/execution.hpp` and `src/execution.cpp` define frequency-level execution policy: serial, OpenMP, or MPI.
+- `include/matrix/ownership.hpp` records whether data are replicated host arrays, distributed block-cyclic arrays, or future device-resident arrays.
+- `include/workspace/screening_workspace.hpp`, `include/workspace/distributed_screening_workspace.hpp`, and `include/workspace/device_screening_workspace.hpp` own the dominant GW screening temporaries.
+- `include/workspace/pq_ph_panel.hpp` and `include/workspace/device_pq_ph_panel.hpp` provide panel views for the self-energy contraction without materializing the full `pq_ph` tensor.
+- `include/linalg/backend_factory.hpp` and `src/linalg/backend_factory.cpp` select the requested backend and validate that it is compatible with the chosen execution mode.
+- `src/gw/gw.cpp` contains the high-level \(G_0W_0\) workflow and should remain independent of backend-specific implementation details where possible.
+
+More detailed formulation and backend-interface notes are in:
 
 ```text
-X = [pq_ph(p,k0,:), pq_ph(p,k0+1,:), ...]
+docs/formulation.md
+docs/data_layout.md
+docs/linalg_backend_interface.md
 ```
 
-The local path applies the screened interaction as `Y = W_c X` with the selected
-local linear-algebra backend.  The ScaLAPACK path scatters this panel into a
-block-cyclic distributed matrix and computes `Y = W_c X` with distributed GEMM.
-This removes the resident `O(nmo^2 n_ph)` `pq_ph` allocation, but the ERI tensor
-itself is still replicated in the current implementation.
+## Known limitations
 
-COSMA support does not add a native COSMA C++ call path.  The source code keeps
-calling the standard ScaLAPACK/PBLAS `pzgemm_` routine from
-`distributed_gemm(...)`.  With `-DGW_ENABLE_COSMA=ON`, CMake links
-`libcosma_pxgemm`, `libcosma`, and `libcosta_scalapack` before the regular
-ScaLAPACK libraries, so those `pzgemm_` symbols are resolved by COSMA.  The
-runtime option `--linalg-backend cosma` is therefore an alias for the
-ScaLAPACK distributed backend and is accepted only in COSMA-enabled builds.
-ScaLAPACK still provides BLACS and `pzgetrf_`/`pzgetrs_`.
-
-## CUDA device-resident screening path
-
-When configured with `-DGW_ENABLE_CUDA=ON` and run with `--linalg-backend cublas`, miniGW uses a dedicated `DeviceScreeningWorkspace` for the screening part of the GW calculation. This is different from the lower-level host-wrapper backends: `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, the solver LU workspace, and contraction panel buffers are allocated once and reused on the GPU.
-
-Serial frequency execution is supported for single-rank runs:
-
-```bash
-./gw --linalg-backend cublas --frequency-parallel serial
-```
-
-MPI frequency distribution is supported for CUDA device-resident paths.  Use `--tasks-per-gpu N` to control how many MPI ranks on the same node share one visible GPU device; the default is 4.  The mapping is local-rank based: `device = (local_rank / tasks_per_gpu) % visible_device_count`.
-
-CUDA example:
-
-```bash
-mpirun -np 8 ./gw --linalg-backend cublas --frequency-parallel mpi --tasks-per-gpu 4
-```
-
-The input ERI tensor is still replicated in host memory.  The CUDA path no longer materialize a full `pq_ph` tensor; contraction panels are supplied by the corresponding device panel view, which either assembles them from a full device ERI copy or streams them through pinned host staging when the full ERI would be too large for the GPU.
-
-### CUDA pq-panel source: resident ERI or streaming panels
-
-The CUDA path now has two device-oriented workspaces:
-
-- `DeviceScreeningWorkspace`, which keeps `V_ph`, `inv(V_ph)`, `epsilon`, `inv(epsilon)-I`, `W_c`, cuBLAS/cuSolver handles, and solver work buffers on the GPU.
-- `DevicePqPhPanelView`, which provides device-resident contraction panels `X(ph,k)` to the screening workspace.
-
-`DevicePqPhPanelView` now supports two storage strategies. In `full-eri-resident` mode it uploads the full replicated ERI tensor to the GPU and assembles each panel with a CUDA kernel. In `streaming-panel` mode it leaves ERI on the host, assembles only the requested `n_ph x panel_width` slice in a pinned host staging buffer, and copies that panel to the GPU. The default `auto` mode chooses full ERI residency only when the ERI copy fits a conservative fraction of currently available device memory; otherwise it uses streaming panels.
-
-This is the dense single-GPU endpoint of the current architecture: the screening matrices stay device-resident, and the `pq_ph` panel path no longer requires full `pq_ph(nmo,nmo,n_ph)` materialization or mandatory full ERI residency on the GPU. A production-scale implementation would still need true integral tiling/shell-block streaming or an RI/three-center representation instead of a replicated four-index ERI tensor.
-
-Note on ScaLAPACK frequency groups: with `--frequency-parallel mpi`, only the root rank of each ScaLAPACK communicator group contributes its completed frequency columns to the final world-level reduction. Non-root ranks in the same group participate in all ScaLAPACK collectives but keep their replicated output columns zero before the final `MPI_Allreduce`, avoiding over-counting by the group size.
-
-Progress output for grouped ScaLAPACK runs is reported per frequency group.  The
-`completed A / B assigned distributed frequencies` counter is local to the group;
-the parenthesized `last global frequency` field shows the 1-based global frequency
-index most recently completed by that group.  This avoids the misleading pattern
-where only one group appeared to print progress when global frequency numbers were
-reported every tenth point.
+- Resolution of the Identity (RI) / density fitting is not implemented.
+- The input still requires a full four-index MO ERI tensor.
+- The ERI tensor is replicated in host memory.
+- The panel-based contraction avoids materializing the full `pq_ph(nmo,nmo,nph)` tensor, but does not yet solve the full distributed/tiled integral-storage problem.
+- The ScaLAPACK path distributes the dominant CPU screening matrices, and the COSMA backend targets multi-node multi-GPU distributed screening; however, the overall GW workflow is not yet a fully distributed/tiled production implementation because the ERI input remains replicated.
+- CUDA support is currently a dense single-node/device-oriented path with replicated host input data.
