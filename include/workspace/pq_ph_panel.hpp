@@ -8,6 +8,8 @@
 
 namespace gw::workspace {
 
+void set_pq_ph_panel_openmp_kernel_loops(bool enabled) noexcept;
+
 // Lightweight panel view for the pq-particle-hole coupling tensor
 //   P_{pk,ia} = (p q | i a)
 // without materializing the full Tensor3Real(nmo, nmo, n_ph).

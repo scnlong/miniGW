@@ -581,6 +581,7 @@ GwResult run_g0w0(const GwInput& input, const GwSettings& settings) {
 #if defined(GW_ENABLE_OPENMP_KERNEL_LOOPS)
     g_openmp_kernel_loops_enabled.store(settings.execution.openmp_kernel_loops, std::memory_order_relaxed);
     workspace::set_host_screening_openmp_kernel_loops(settings.execution.openmp_kernel_loops);
+    workspace::set_pq_ph_panel_openmp_kernel_loops(settings.execution.openmp_kernel_loops);
 #endif
 
 	// set up parameters
