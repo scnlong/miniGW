@@ -1,3 +1,5 @@
+[![Build and Regression](https://github.com/scnlong/miniGW/actions/workflows/build-regression.yml/badge.svg?branch=master)](https://github.com/scnlong/miniGW/actions/workflows/build-regression.yml)
+
 <p align="center">
   <img src="docs/logo/miniGW-logo.png" alt="miniGW logo" width="350">
 </p>
