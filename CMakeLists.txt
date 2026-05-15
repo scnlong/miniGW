@@ -25,6 +25,9 @@ add_library(gwcore
     src/execution.cpp
     src/gw/frequency_grids.cpp
     src/gw/pade.cpp
+    src/gw/qp_solver.cpp
+    src/gw/sigma.cpp
+    src/gw/sigma_c_driver.cpp
     src/hdf5_input.cpp
     src/linalg/linalg.cpp
     src/gw/gw.cpp
