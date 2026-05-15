@@ -199,7 +199,7 @@ function(gw_add_h2o_blas_lapack_test)
         COMMAND
             ${CMAKE_COMMAND} -E env
             OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=4
+            OPENBLAS_NUM_THREADS=${GW_TEST_MPI_RANKS}
             $<TARGET_FILE:gw>
             --input-dir "${GW_REFERENCE_H2O_DIR}"
             --freq-points 200
@@ -232,7 +232,7 @@ function(gw_add_h2o_blas_lapack_test)
 
     set_tests_properties(blas_lapack_h2o_reference_compute
         PROPERTIES
-            PROCESSORS 4
+            PROCESSORS ${GW_TEST_MPI_RANKS}
             DEPENDS blas_lapack_h2o_reference_run
     )
 
@@ -296,7 +296,7 @@ function(gw_add_h2o_mpi_blas_lapack_test)
 
     set_tests_properties(mpi_h2o_reference_compute
         PROPERTIES
-            PROCESSORS 4
+            PROCESSORS ${GW_TEST_MPI_RANKS}
             DEPENDS mpi_h2o_reference_run
     )
 
@@ -360,7 +360,7 @@ function(gw_add_h2o_scalapack_test)
 
     set_tests_properties(scalapack_h2o_reference_compute
         PROPERTIES
-            PROCESSORS 4
+            PROCESSORS ${GW_TEST_MPI_RANKS}
             DEPENDS scalapack_h2o_reference_run
     )
 
@@ -425,7 +425,7 @@ function(gw_add_h2o_cosma_cuda_test)
 
     set_tests_properties(cosma_cuda_h2o_reference_compute
         PROPERTIES
-            PROCESSORS 4
+            PROCESSORS ${GW_TEST_MPI_RANKS}
             RESOURCE_LOCK gpu
             DEPENDS cosma_cuda_h2o_reference_run
     )
@@ -556,7 +556,7 @@ function(gw_add_h2o_cublas_mpi_test)
 
     set_tests_properties(h2o_cublas_mpi_compute
         PROPERTIES
-            PROCESSORS 4
+            PROCESSORS ${GW_TEST_MPI_RANKS}
             RESOURCE_LOCK gpu
             DEPENDS h2o_cublas_mpi_run
     )

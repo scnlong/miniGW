@@ -4,7 +4,7 @@ rm -rf build
 
 cmake -B build -C cmake_install.cmake \
   -DGW_TEST_MPI_LAUNCHER=mpirun \
-  -DGW_TEST_MPI_RANKS=4 \
+  -DGW_TEST_MPI_RANKS="${GW_TEST_MPI_RANKS:-4}" \
   -DGW_TEST_MPI_NUMPROC_FLAG=-np
 
 cmake --build build -j 4
