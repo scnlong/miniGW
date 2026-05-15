@@ -42,10 +42,15 @@ add_library(gwcore
 
 target_include_directories(gwcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+find_package(HDF5 REQUIRED COMPONENTS C)
+
+target_include_directories(gwcore PUBLIC ${HDF5_INCLUDE_DIRS})
+
 if(TARGET HDF5::HDF5)
     target_link_libraries(gwcore PUBLIC HDF5::HDF5)
+elseif(TARGET hdf5::hdf5)
+    target_link_libraries(gwcore PUBLIC hdf5::hdf5)
 else()
-    target_include_directories(gwcore PUBLIC ${HDF5_INCLUDE_DIRS})
     target_link_libraries(gwcore PUBLIC ${HDF5_LIBRARIES})
 endif()
 
