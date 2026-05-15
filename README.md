@@ -4,9 +4,11 @@
 
 # miniGW
 
-A compact molecular G0W0 code written in modern C++20, using PySCF as the DFT starting point.
+A compact molecular G0W0 code written in modern C++, using PySCF for generating DFT starting point.
 
-The project starts from a serial CPU implementation and reads PySCF-generated DFT data from a single HDF5 input file. The GW workflow calls dense linear algebra through `gw::linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
+The project starts from a serial CPU implementation and reads PySCF-generated DFT data from a single HDF5 input file. The GW workflow calls dense linear algebra through `linalg::Backend`, allowing BLAS/LAPACK, ScaLAPACK, COSMA, or cuBLAS/cuSolver backends to be added without rewriting the GW driver.
+
+N.B. Resolution of the Identity (RI) or density fitting is not supproted.
 
 ## Scope
 
@@ -21,7 +23,24 @@ Implemented modules:
 - continued-fraction Padé approximation;
 - iterative diagonal quasiparticle-energy update;
 - HDF5 reader for the single-file PySCF input bundle;
-- explicit dense linear-algebra backend boundary with a serial reference backend.
+- Several dense linear-algebra backends.
+
+## Required C++ build dependencies:
+
+Required dependencies:
+
+- C++20 compiler
+- CMake >= 3.21
+- HDF5 C development files
+- BLAS/LAPACK/LAPACKE if GW_ENABLE_BLAS_LAPACK=ON
+- MPI if GW_ENABLE_MPI=ON
+- ScaLAPACK if GW_ENABLE_SCALAPACK=ON
+- CUDA Toolkit if GW_ENABLE_CUDA=ON
+
+Required Python dependencies for PySCF input generation:
+- numpy
+- h5py
+- pyscf
 
 ## Build
 
@@ -37,7 +56,7 @@ cmake --build build -j 4
 Run a PySCF DFT calculation with `pyscf_prep/pyscf_g0w0_prep.py`. It writes one input bundle:
 
 ```text
-pyscf_g0w0_input.h5
+gw_input.h5
 ```
 
 The HDF5 file contains datasets `/mo_energy`, `/eri_mo`, and `/vxc_mo`. The scalar values `nocc` and `fermi_energy` are stored as file attributes. Energies are in Hartree. Arrays are written as C-order `float64` data, matching miniGW's row-major containers.
@@ -48,22 +67,11 @@ The HDF5 file contains datasets `/mo_energy`, `/eri_mo`, and `/vxc_mo`. The scal
 ./build/gw --input-dir /path/to/pyscf_output --freq-points 200 --pade-params 16 --state 5
 ```
 
-Use `--all-states` to compute all diagonal states. 
+Use `--help` to see complete options. 
 
 ## Regression Tests
 
-```bash
-ctest --test-dir build/ -N 
-```
-
-List all the cases to be tested.
-
-```bash
-ctest --test-dir build -j 4 --output-on-failure
-```
-
-Run all the regression test cases.
-
+Copy `scripts/regression_tests_local.sh` to the miniGW's root folder to run all regression test cases on your local machine. Or `/home/qliu/Software/miniGW/scripts/regression_tests_slurm.sh` if you works on HPC.
 
 ## Linear algebra backends
 

@@ -1,0 +1,30 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    bash \
+    git \
+    build-essential \
+    cmake \
+    gfortran \
+    pkg-config \
+    python3 \
+    libopenblas-dev \
+    liblapack-dev \
+    liblapacke-dev \
+    libhdf5-dev \
+    libopenmpi-dev \
+    openmpi-bin \
+    libscalapack-openmpi-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+
+# Needed when OpenMPI is executed as root inside Docker.
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+
+WORKDIR /work
