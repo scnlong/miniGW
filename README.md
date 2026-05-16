@@ -32,7 +32,7 @@ Implemented components include:
 - MPI frequency distribution;
 - ScaLAPACK distributed screening path;
 - COSMA GPU backend for multi-node multi-GPU distributed screening;
-- CUDA cuBLAS/cuSolver backend and CUDA device-resident screening workspace.
+- CUDA cuBLAS/cuSolver backend with per-rank GPU-resident screening workspaces.
 
 ## Repository layout
 
@@ -196,8 +196,8 @@ Useful options:
 --frequency-parallel MODE     auto, serial, mpi, or openmp
 --kernel-parallel MODE        auto, serial, or openmp
 --contraction-panel-size N    Number of (p,k) vectors per Sigma_c contraction panel
---scalapack-ranks-per-group N MPI ranks per ScaLAPACK communicator group
---tasks-per-gpu N             Local-rank-to-GPU mapping block size for CUDA backends
+--scalapack-ranks-per-group N MPI ranks per distributed frequency group
+--tasks-per-gpu N             Local-rank-to-GPU mapping block size for CUDA runs
 ```
 
 See the complete command-line interface with:
@@ -264,6 +264,15 @@ blas-lapack
 
 when the executable was built with `GW_ENABLE_BLAS_LAPACK=ON`.
 
+The backend families target different scaling regimes:
+
+- `reference` and `blas-lapack` are replicated host-memory paths.
+- `scalapack` distributes the dominant CPU screening matrices inside MPI frequency groups.
+- `cosma` targets distributed multi-rank/multi-GPU GEMM in the screening workflow when linked against a GPU-enabled COSMA stack.
+- `cublas` is a per-rank CUDA path: each MPI rank owns its own GPU-resident screening workspace, and MPI distributes frequency points across ranks. It does not distribute one screening matrix across multiple GPUs.
+
+In all current paths, the four-index ERI input remains replicated in host memory.
+
 ### Reference backend
 
 The reference backend is self-contained and intended for correctness testing and portability. It is not optimized for production performance.
@@ -311,7 +320,7 @@ mpirun -np 4 ./build/gw \
 
 ### ScaLAPACK backend
 
-`--linalg-backend scalapack` enables a distributed ScaLAPACK screening path. In this path, the dominant screening matrices such as `V_ph`, `epsilon`, and `W_c` are represented as BLACS block-cyclic distributed matrices inside `DistributedScreeningWorkspace`.
+`--linalg-backend scalapack` enables a CPU distributed screening path. In this path, the dominant screening matrices such as `V_ph`, `epsilon`, and `W_c` are represented as BLACS block-cyclic distributed matrices inside `DistributedScreeningWorkspace`. The four-index ERI tensor remains replicated on each MPI rank; ScaLAPACK is used for the screening linear algebra, not for distributed integral storage.
 
 Configure with:
 
@@ -346,13 +355,13 @@ mpirun -np 16 ./build-scalapack/gw \
   --linalg-backend scalapack
 ```
 
-In grouped mode, `MPI_COMM_WORLD` is split into frequency groups. Each group owns a BLACS/ScaLAPACK grid and processes one frequency point at a time; different groups process different frequency indices.
+In grouped mode, `MPI_COMM_WORLD` is split into frequency groups. Each group owns a BLACS/ScaLAPACK grid and processes one frequency point at a time; different groups process different frequency indices. The option `--scalapack-ranks-per-group` controls the number of ranks in each distributed frequency group. Despite its current name, this grouping concept is also reused by the COSMA backend.
 
 The ERI tensor is still replicated in host memory. The current distributed path removes replicated ownership of the dominant `nph x nph` screening matrices, but a full distributed-memory GW implementation would still require distributed or tiled integral storage and contraction.
 
 ### COSMA GPU backend
 
-In miniGW, `--linalg-backend cosma` is a GPU-oriented COSMA backend. It is not used as a CPU replacement for the ScaLAPACK backend. The CPU distributed-memory path is the ScaLAPACK backend; the COSMA backend is intended for multi-node multi-GPU distributed screening when miniGW is built against a GPU-enabled COSMA stack.
+In miniGW, `--linalg-backend cosma` is a GPU-oriented COSMA backend. It is not used as a CPU replacement for the ScaLAPACK backend. The CPU distributed-memory path is the ScaLAPACK backend; the COSMA backend is intended for multi-node multi-GPU distributed screening when miniGW is built against a GPU-enabled COSMA stack. COSMA should be understood as a communication-optimized distributed GEMM provider, not as an automatic BLACS-grid tuner or a complete ScaLAPACK replacement.
 
 Configure after loading suitable MPI, CUDA, COSMA, and required COSMA dependency modules:
 
@@ -376,13 +385,13 @@ mpirun -np 8 ./build-cosma/gw \
   --linalg-backend cosma
 ```
 
-For larger runs, the backend is intended to operate across multiple nodes and multiple GPUs, subject to the MPI launcher, GPU visibility, and the COSMA installation used on the target machine. The exact rank-to-GPU mapping and performance characteristics should be validated on the target cluster rather than inferred from the CPU ScaLAPACK backend.
+For larger runs, the backend is intended to operate across multiple nodes and multiple GPUs, subject to the MPI launcher, GPU visibility, and the COSMA installation used on the target machine. The exact rank-to-GPU mapping and performance characteristics should be validated on the target cluster rather than inferred from the CPU ScaLAPACK backend. COSMA optimizes the distributed GEMM execution inside the distributed screening context; miniGW still controls frequency grouping, matrix ownership, and the replicated ERI input.
 
 ### CUDA cuBLAS/cuSolver backend
 
 `--linalg-backend cublas` enables CUDA support when configured with `GW_ENABLE_CUDA=ON`.
 
-The lower-level CUDA backend implements the generic `gw::linalg::Backend` interface with cuBLAS/cuSolver host-wrapper semantics: inputs and outputs remain replicated host matrices, while each backend call stages data through the GPU.  The main GW CUDA path uses this backend for selection and capability dispatch, then switches to a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU.
+The lower-level CUDA backend provides cuBLAS/cuSolver wrappers for replicated host matrices with host-wrapper semantics. The main GW CUDA path uses a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU. In MPI mode, each rank owns its own CUDA workspace and processes a subset of the frequency points.
 
 Configure with:
 
@@ -403,7 +412,9 @@ Single-rank CUDA run:
   --frequency-parallel serial
 ```
 
-MPI frequency distribution with CUDA is supported.  With more than one MPI rank, use `--frequency-parallel mpi`; multi-rank serial frequency execution is reserved for distributed collective backends such as ScaLAPACK and COSMA.
+For CUDA with multiple MPI ranks, use `--frequency-parallel mpi`. Multi-rank `--frequency-parallel serial` is reserved for collective distributed backends such as ScaLAPACK/COSMA, where all ranks in a group cooperate on the same frequency point. The cuBLAS path is not such a collective backend.
+
+MPI frequency distribution with CUDA is supported:
 
 ```bash
 mpirun -np 8 ./build-cuda/gw \
@@ -419,7 +430,7 @@ The mapping is local-rank based:
 device = (local_rank / tasks_per_gpu) % visible_device_count
 ```
 
-`--tasks-per-gpu` does not limit the total number of MPI ranks.  It groups consecutive local ranks before cycling over the visible CUDA devices.  For balanced placement, choose the number of local MPI ranks as a multiple of `visible_device_count * tasks_per_gpu`.  For example, on a node with two visible GPUs and `--tasks-per-gpu 2`, ranks 0-1 map to GPU 0 and ranks 2-3 map to GPU 1; launching 10 local ranks would cycle this pattern and map six ranks to GPU 0 and four ranks to GPU 1.
+`--tasks-per-gpu N` groups `N` consecutive local MPI ranks onto one visible GPU, then cycles over the visible GPUs. It does not cap the total number of ranks launched. For balanced GPU sharing, choose the number of local ranks as a multiple of `visible_device_count * N`. For example, with two visible GPUs and `--tasks-per-gpu 2`, four local ranks map as `0,1 -> GPU 0` and `2,3 -> GPU 1`; ten local ranks map as `0,1,4,5,8,9 -> GPU 0` and `2,3,6,7 -> GPU 1`.
 
 The input ERI tensor remains replicated in host memory. CUDA contraction panels are provided by `DevicePqPhPanelView`, which either keeps the full ERI tensor resident on the GPU or streams only the requested panel through pinned host staging, depending on the selected storage mode and available device memory.
 
@@ -448,5 +459,7 @@ docs/linalg_backend_interface.md
 - The input still requires a full four-index MO ERI tensor.
 - The ERI tensor is replicated in host memory.
 - The panel-based contraction avoids materializing the full `pq_ph(nmo,nmo,nph)` tensor, but does not yet solve the full distributed/tiled integral-storage problem.
-- The ScaLAPACK path distributes the dominant CPU screening matrices, and the COSMA backend targets multi-node multi-GPU distributed screening; however, the overall GW workflow is not yet a fully distributed/tiled production implementation because the ERI input remains replicated.
-- CUDA support is currently a per-rank GPU-resident screening path with replicated host input data; it does not distribute one screening matrix across multiple GPUs.
+- The ScaLAPACK path distributes the dominant CPU `nph x nph` screening matrices, but does not distribute the four-index ERI tensor.
+- The COSMA path targets distributed GEMM in the screening workflow; it is not a complete replacement for ScaLAPACK factorization/solve or integral storage.
+- The cuBLAS path is a per-rank GPU-resident path with MPI frequency distribution. It does not distribute one screening matrix across multiple GPUs.
+- Multi-rank CUDA runs require `--frequency-parallel mpi`; multi-rank `--frequency-parallel serial` is reserved for collective distributed backends such as ScaLAPACK/COSMA.

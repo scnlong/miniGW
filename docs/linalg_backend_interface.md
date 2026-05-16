@@ -80,10 +80,12 @@ struct BackendCapabilities {
 
 The most important flags are:
 
-- `distributed_mpi`: the backend participates in collective distributed matrix operations.
-- `uses_device_memory`: miniGW itself owns device-resident data for this backend path.
+- `distributed_mpi`: multiple MPI ranks collectively own and operate on distributed matrices inside the backend path. This flag is reserved for ScaLAPACK/COSMA-style distributed screening paths.
+- `uses_device_memory`: the backend uses GPU/device memory internally or selects a GPU-resident execution path. This does not imply distributed multi-GPU ownership.
 - `uses_cosma_pxgemm`: distributed GEMM is routed explicitly to COSMA's prefixed PBLAS-compatible provider, `cosma_pzgemm_`.
 - `external_provider_may_use_gpu`: the external provider may use GPUs internally.  This is diagnostic and does not imply that miniGW owns COSMA's device buffers.
+
+The current cuBLAS backend has `uses_device_memory=true` and `distributed_mpi=false`. MPI is used outside the backend to distribute frequency points, while each rank owns its own CUDA screening workspace. Setting `distributed_mpi=true` would require a different backend that defines distributed GPU matrix ownership and collective multi-rank operations.
 
 These flags are used to select the correct screening workspace and to reject incompatible execution modes.
 
@@ -149,7 +151,7 @@ include/workspace/cosma_distributed_screening_workspace.hpp
 src/workspace/cosma_distributed_screening_workspace.cpp
 ```
 
-The COSMA path is not a CPU ScaLAPACK replacement in miniGW.  It is the explicit COSMA distributed-GEMM path intended for multi-node/multi-GPU screening runs.
+The COSMA path is not a CPU ScaLAPACK replacement in miniGW.  It is the explicit COSMA distributed-GEMM path intended for multi-node/multi-GPU screening runs. COSMA should not be interpreted as an automatic BLACS-grid tuner: miniGW still defines frequency groups and distributed matrix ownership, while COSMA optimizes GEMM communication and execution inside that context.
 
 miniGW calls COSMA through the prefixed PBLAS-compatible ABI symbol:
 
@@ -185,10 +187,10 @@ src/workspace/device_pq_ph_panel.cu
 
 There are two CUDA-related layers:
 
-1. A lower-level cuBLAS/cuSolver backend that implements generic backend operations with host-wrapper semantics.  This is the `CublasBackend` selected by the backend factory when the user passes `--linalg-backend cublas`.  Its capabilities identify the selected backend as device-backed, but it is not a distributed-MPI matrix backend.
+1. A lower-level cuBLAS/cuSolver backend that implements generic backend operations with host-wrapper semantics. It remains useful as a factory-created `gw::linalg::Backend` object and as a capability carrier for `--linalg-backend cublas`.
 2. A GW-specific `DeviceScreeningWorkspace` that keeps `V_ph`, `epsilon`, `W_c`, solver workspaces, and contraction panels device-resident across frequency points.
 
-The second layer is the preferred CUDA path for the main GW workflow.  The lower-level host-wrapper API is useful for selection, capability dispatch, integration tests, and correctness checks, but hiding host-device copies inside every small backend call is not the desired high-performance design.
+The second layer is the preferred CUDA path.  The lower-level host-wrapper API is useful for integration and correctness testing, but hiding host-device copies inside every small backend call is not the desired high-performance design. The cuBLAS path is per-rank: it does not distribute one screening matrix across multiple GPUs.
 
 ## Execution-policy compatibility
 
@@ -199,20 +201,9 @@ General rules:
 - Local host backends may use serial execution, OpenMP kernel loops, or MPI frequency distribution.
 - OpenMP frequency parallelism requires a thread-safe backend.
 - ScaLAPACK and COSMA distributed screening require MPI and do not support OpenMP frequency parallelism.
-- CUDA device-resident screening supports single-rank serial execution and MPI frequency distribution.  With multiple MPI ranks, use `--frequency-parallel mpi`; multi-rank serial frequency execution is reserved for distributed collective backends such as ScaLAPACK and COSMA.  Input ERI ownership is still replicated on the host.
-
-
-### CUDA rank-to-device mapping
-
-For CUDA backends, `--tasks-per-gpu N` controls the local-rank-to-device mapping:
-
-```text
-device = (local_rank / tasks_per_gpu) % visible_device_count
-```
-
-This option is a mapping block size, not a resource limit.  It does not restrict the total number of MPI ranks launched.  For balanced placement, choose the number of local MPI ranks as a multiple of `visible_device_count * tasks_per_gpu`.  On a node with two visible GPUs and `--tasks-per-gpu 2`, ranks 0-1 map to GPU 0 and ranks 2-3 map to GPU 1.  If 10 local ranks are launched, the pattern cycles and maps ranks 0,1,4,5,8,9 to GPU 0 and ranks 2,3,6,7 to GPU 1.
-
-The current CUDA path assigns different frequency points to different ranks and gives each rank its own GPU-resident screening workspace.  It does not distribute one `W_c` or `epsilon` matrix across multiple GPUs.
+- CUDA device-resident screening supports single-rank serial execution and MPI frequency distribution. With multiple MPI ranks, CUDA runs should use `--frequency-parallel mpi`.
+- Multi-rank serial frequency execution is reserved for collective distributed backends such as ScaLAPACK/COSMA, where all ranks in a group cooperate on the same frequency point.
+- Input ERI ownership is still replicated on the host in all current backends.
 
 ## Current command-line backend names
 
@@ -245,10 +236,39 @@ The high-level GW driver should not contain backend-specific dense linear-algebr
 
 This boundary keeps the physics-level workflow readable while allowing backend implementations to specialize memory ownership, communication, and device execution.
 
+## CUDA rank-to-GPU mapping
+
+For CUDA runs, `--tasks-per-gpu N` controls local-rank-to-GPU mapping with the formula
+
+```text
+device = (local_rank / tasks_per_gpu) % visible_device_count
+```
+
+It groups `N` consecutive local MPI ranks onto one visible GPU, then cycles over visible GPUs. It is not a hard limit on the total number of ranks that may use a GPU. For balanced GPU sharing, choose the number of local ranks as a multiple of `visible_device_count * N`.
+
+For example, with two visible GPUs and `--tasks-per-gpu 2`:
+
+```text
+4 local ranks:
+  ranks 0,1 -> GPU 0
+  ranks 2,3 -> GPU 1
+
+10 local ranks:
+  ranks 0,1,4,5,8,9 -> GPU 0
+  ranks 2,3,6,7     -> GPU 1
+```
+
+## Possible Kokkos direction
+
+Kokkos is a possible future rank-local execution layer, not a replacement for ScaLAPACK or COSMA. In the distributed backends, ScaLAPACK/COSMA would still own the distributed matrix problem. Kokkos could be used inside each rank for local panel assembly, host/device staging, custom kernels, pinned-buffer management, and CPU/GPU pipeline experiments.
+
+For the per-rank cuBLAS path, Kokkos could replace some raw CUDA kernels and manual memory bookkeeping while retaining cuBLAS/cuSolver for large dense GEMM and solve operations.
+
 ## Known limitations
 
 - The generic `gw::linalg::Backend` interface is too narrow for fully optimized distributed or GPU-resident workflows; specialized workspaces are still required.
-- ScaLAPACK and COSMA distribute the dominant screening matrices but do not distribute the full ERI input.
+- ScaLAPACK distributes the dominant CPU `nph x nph` screening matrices but does not distribute the full ERI input.
 - COSMA is currently used only as the explicit distributed GEMM provider; ScaLAPACK still handles distributed inversion/solve infrastructure.
+- CUDA/cuBLAS is a per-rank GPU-resident path with MPI frequency distribution, not a distributed multi-GPU matrix backend.
 - CUDA support still starts from replicated host input data.
 - A future production design should introduce distributed/tiled integral ownership and a stronger separation between host, distributed, and device matrix types.

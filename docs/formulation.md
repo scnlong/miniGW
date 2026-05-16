@@ -191,7 +191,7 @@ The formulation above is shared by all execution paths.  The implementation diff
 | MPI frequency distribution | replicated per MPI rank | local backend per assigned frequency |
 | ScaLAPACK | BLACS block-cyclic distributed | ScaLAPACK/PBLAS |
 | COSMA | distributed screening matrices | COSMA `cosma_pzgemm_` for GEMM; ScaLAPACK for remaining distributed solve/factorization infrastructure |
-| CUDA cuBLAS/cuSolver | device-resident dense screening workspace | cuBLAS/cuSolver |
+| CUDA cuBLAS/cuSolver | per-rank device-resident dense screening workspace | cuBLAS/cuSolver |
 
 ## Scientific and scaling limitations
 
@@ -199,5 +199,6 @@ The formulation above is shared by all execution paths.  The implementation diff
 - The input is a full four-index MO ERI tensor.
 - The ERI tensor is still replicated in host memory.
 - The code computes diagonal quasiparticle updates only.
-- The ScaLAPACK and COSMA paths distribute the dominant screening matrices but do not yet implement a fully distributed/tiled integral workflow.
-- CUDA support is dense and device-oriented; it still starts from replicated host input data.
+- The ScaLAPACK path distributes the dominant CPU screening matrices but does not distribute the four-index ERI input.
+- The COSMA path targets distributed GEMM in the screening workflow; it is not a complete ScaLAPACK replacement and does not solve integral storage.
+- CUDA/cuBLAS support is per-rank and device-oriented; it still starts from replicated host input data and does not distribute one screening matrix across multiple GPUs.

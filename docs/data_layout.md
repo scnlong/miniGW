@@ -220,7 +220,7 @@ This removes the full resident `pq_ph(nmo,nmo,nph)` tensor, but it does not yet 
 | `V_ph`, `epsilon`, `W_c` in local path | replicated host | Uses `MatrixReal` / `MatrixComplex`. |
 | `V_ph`, `epsilon`, `W_c` in ScaLAPACK path | BLACS block-cyclic distributed | CPU distributed path. |
 | `V_ph`, `epsilon`, `W_c` in COSMA path | BLACS/COSMA distributed | Intended multi-node/multi-GPU distributed GEMM provider. |
-| CUDA device screening workspace | device-resident dense matrices | Still starts from replicated host input. |
+| CUDA device screening workspace | per-rank device-resident dense matrices | Still starts from replicated host input; does not distribute one screening matrix across multiple GPUs. |
 | `pq_ph` | panel-generated | Full tensor is not materialized in the main workflow. |
 
 ## Known limitations
@@ -229,4 +229,6 @@ This removes the full resident `pq_ph(nmo,nmo,nph)` tensor, but it does not yet 
 - RI / density fitting is not implemented.
 - Parallel HDF5 input and distributed/tiled ERI ownership are not implemented.
 - The panel contraction removes a large intermediate tensor but does not remove replicated ERI storage.
-- ScaLAPACK and COSMA distribute the dominant screening matrices, not the full GW data model.
+- ScaLAPACK distributes the dominant CPU screening matrices, not the full GW data model.
+- COSMA targets distributed GEMM in the screening workflow, but does not remove replicated ERI ownership or replace the remaining distributed solve/factorization infrastructure.
+- The cuBLAS path is per-rank GPU-resident and uses MPI for frequency distribution, not for distributed GPU matrix ownership.
