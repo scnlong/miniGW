@@ -197,7 +197,7 @@ Useful options:
 --kernel-parallel MODE        auto, serial, or openmp
 --contraction-panel-size N    Number of (p,k) vectors per Sigma_c contraction panel
 --scalapack-ranks-per-group N MPI ranks per ScaLAPACK communicator group
---tasks-per-gpu N             MPI ranks sharing one visible GPU
+--tasks-per-gpu N             Local-rank-to-GPU mapping block size for CUDA backends
 ```
 
 See the complete command-line interface with:
@@ -382,7 +382,7 @@ For larger runs, the backend is intended to operate across multiple nodes and mu
 
 `--linalg-backend cublas` enables CUDA support when configured with `GW_ENABLE_CUDA=ON`.
 
-The lower-level CUDA backend provides cuBLAS/cuSolver wrappers for replicated host matrices. The main GW CUDA path additionally uses a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU.
+The lower-level CUDA backend implements the generic `gw::linalg::Backend` interface with cuBLAS/cuSolver host-wrapper semantics: inputs and outputs remain replicated host matrices, while each backend call stages data through the GPU.  The main GW CUDA path uses this backend for selection and capability dispatch, then switches to a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU.
 
 Configure with:
 
@@ -403,7 +403,7 @@ Single-rank CUDA run:
   --frequency-parallel serial
 ```
 
-MPI frequency distribution with CUDA is supported:
+MPI frequency distribution with CUDA is supported.  With more than one MPI rank, use `--frequency-parallel mpi`; multi-rank serial frequency execution is reserved for distributed collective backends such as ScaLAPACK and COSMA.
 
 ```bash
 mpirun -np 8 ./build-cuda/gw \
@@ -418,6 +418,8 @@ The mapping is local-rank based:
 ```text
 device = (local_rank / tasks_per_gpu) % visible_device_count
 ```
+
+`--tasks-per-gpu` does not limit the total number of MPI ranks.  It groups consecutive local ranks before cycling over the visible CUDA devices.  For balanced placement, choose the number of local MPI ranks as a multiple of `visible_device_count * tasks_per_gpu`.  For example, on a node with two visible GPUs and `--tasks-per-gpu 2`, ranks 0-1 map to GPU 0 and ranks 2-3 map to GPU 1; launching 10 local ranks would cycle this pattern and map six ranks to GPU 0 and four ranks to GPU 1.
 
 The input ERI tensor remains replicated in host memory. CUDA contraction panels are provided by `DevicePqPhPanelView`, which either keeps the full ERI tensor resident on the GPU or streams only the requested panel through pinned host staging, depending on the selected storage mode and available device memory.
 
@@ -447,4 +449,4 @@ docs/linalg_backend_interface.md
 - The ERI tensor is replicated in host memory.
 - The panel-based contraction avoids materializing the full `pq_ph(nmo,nmo,nph)` tensor, but does not yet solve the full distributed/tiled integral-storage problem.
 - The ScaLAPACK path distributes the dominant CPU screening matrices, and the COSMA backend targets multi-node multi-GPU distributed screening; however, the overall GW workflow is not yet a fully distributed/tiled production implementation because the ERI input remains replicated.
-- CUDA support is currently a dense single-node/device-oriented path with replicated host input data.
+- CUDA support is currently a per-rank GPU-resident screening path with replicated host input data; it does not distribute one screening matrix across multiple GPUs.

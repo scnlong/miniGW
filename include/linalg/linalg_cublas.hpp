@@ -7,13 +7,20 @@
 
 namespace gw::linalg {
 
-// Single-rank CUDA backend using cuBLAS/cuSolver.
+// Generic CUDA backend using cuBLAS/cuSolver.
 //
-// This is an interface-compatible host wrapper: inputs and outputs are still
-// replicated MatrixComplex objects.  The backend copies matrices to the GPU,
-// calls cuBLAS/cuSolver, and copies results back.  It is a real CUDA call path
-// intended for correctness and incremental integration.  A high-performance GW
-// path should keep V_ph/epsilon/workspaces device-resident across frequencies.
+// This class implements the gw::linalg::Backend interface with host-wrapper
+// semantics: inputs and outputs are still replicated host MatrixComplex
+// objects.  Each call stages data to the GPU, invokes cuBLAS/cuSolver, and
+// copies the result back.
+//
+// In the main GW executable, selecting --linalg-backend cublas creates this
+// backend through the backend factory.  Its capabilities identify it as a
+// device-memory backend, after which the GW driver switches to the dedicated
+// DeviceScreeningWorkspace path for GPU-resident V_ph/epsilon/W_c matrices and
+// contraction panels.  The backend itself is not a distributed-MPI matrix
+// backend; MPI+CUDA parallelism is implemented outside this class by assigning
+// different frequency points to different ranks.
 class CublasBackend final : public Backend {
 public:
     [[nodiscard]] std::string_view name() const noexcept override;

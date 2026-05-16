@@ -42,10 +42,9 @@ std::shared_ptr<const linalg::Backend> make_local_linalg_backend(const Cli& cli)
 
     if (cli.linalg_backend == "cosma") {
 #ifdef GW_HAS_COSMA_BACKEND
-        // COSMA is called through its prefixed PBLAS-compatible ABI. miniGW keeps the
-        // ScaLAPACK-style distributed matrix descriptors on its side, while COSMA may
-        // execute the distributed GEMM through its GPU-enabled runtime stack depending
-        // on the linked COSMA build and runtime environment.
+        // COSMA is used through its prefixed ScaLAPACK-compatible pxgemm ABI.
+        // The distributed code path remains host/block-cyclic, but GEMM is
+        // explicitly routed to cosma_pzgemm_ instead of ordinary pzgemm_.
         return linalg::make_cosma_pxgemm_backend();
 #else
         throw std::runtime_error(
@@ -93,7 +92,7 @@ void validate_backend_for_execution(const linalg::Backend& backend, const Execut
 
     if (execution.frequency_parallel_mode == FrequencyParallelMode::Serial && execution.mpi_size > 1) {
         if (caps.uses_device_memory) {
-            throw std::runtime_error("Device backend selected with multiple MPI ranks in serial frequency mode. Current CUDA workspaces support a single MPI rank; add explicit rank-to-GPU mapping before running with MPI.");
+            throw std::runtime_error("Device backend selected with multiple MPI ranks in serial frequency mode. Current CUDA workspaces are per-rank and are not collective distributed-MPI matrix backends. Use --frequency-parallel mpi for MPI+CUDA; --tasks-per-gpu only controls local rank-to-GPU mapping.");
         }
         throw std::runtime_error("Replicated local host backend selected with multiple MPI ranks in serial frequency mode. Run without mpirun or use --frequency-parallel mpi.");
     }

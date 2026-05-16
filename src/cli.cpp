@@ -22,7 +22,7 @@ void print_usage(const char* exe) {
               << "  --kernel-parallel MODE       auto, serial, or openmp for local kernel loops [default: auto]\n"
               << "  --contraction-panel-size N   Number of (p,k) vectors batched in Sigma_c contraction [default: 32]\n"
               << "  --scalapack-ranks-per-group N  MPI ranks per ScaLAPACK communicator group for frequency batching [default: 4]\n"
-              << "  --tasks-per-gpu N           MPI ranks sharing one GPU for CUDA device backends [default: 4]\n"
+              << "  --tasks-per-gpu N           Local-rank-to-GPU mapping block size for CUDA device backends [default: 4]\n"
               << "  --print-memory-footprint     Print an algorithmic memory estimate before running GW\n"
               << "  --output-dir PATH            Directory containing E_c_before_Pade.out, E_c.out, and gw.out\n"
               << "  --help                       Show this message\n";

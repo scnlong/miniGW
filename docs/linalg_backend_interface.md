@@ -185,10 +185,10 @@ src/workspace/device_pq_ph_panel.cu
 
 There are two CUDA-related layers:
 
-1. A lower-level cuBLAS/cuSolver backend that implements generic backend operations with host-wrapper semantics.
+1. A lower-level cuBLAS/cuSolver backend that implements generic backend operations with host-wrapper semantics.  This is the `CublasBackend` selected by the backend factory when the user passes `--linalg-backend cublas`.  Its capabilities identify the selected backend as device-backed, but it is not a distributed-MPI matrix backend.
 2. A GW-specific `DeviceScreeningWorkspace` that keeps `V_ph`, `epsilon`, `W_c`, solver workspaces, and contraction panels device-resident across frequency points.
 
-The second layer is the preferred CUDA path.  The lower-level host-wrapper API is useful for integration and correctness testing, but hiding host-device copies inside every small backend call is not the desired high-performance design.
+The second layer is the preferred CUDA path for the main GW workflow.  The lower-level host-wrapper API is useful for selection, capability dispatch, integration tests, and correctness checks, but hiding host-device copies inside every small backend call is not the desired high-performance design.
 
 ## Execution-policy compatibility
 
@@ -199,7 +199,20 @@ General rules:
 - Local host backends may use serial execution, OpenMP kernel loops, or MPI frequency distribution.
 - OpenMP frequency parallelism requires a thread-safe backend.
 - ScaLAPACK and COSMA distributed screening require MPI and do not support OpenMP frequency parallelism.
-- CUDA device-resident screening supports serial execution and MPI frequency distribution, but input ERI ownership is still replicated on the host.
+- CUDA device-resident screening supports single-rank serial execution and MPI frequency distribution.  With multiple MPI ranks, use `--frequency-parallel mpi`; multi-rank serial frequency execution is reserved for distributed collective backends such as ScaLAPACK and COSMA.  Input ERI ownership is still replicated on the host.
+
+
+### CUDA rank-to-device mapping
+
+For CUDA backends, `--tasks-per-gpu N` controls the local-rank-to-device mapping:
+
+```text
+device = (local_rank / tasks_per_gpu) % visible_device_count
+```
+
+This option is a mapping block size, not a resource limit.  It does not restrict the total number of MPI ranks launched.  For balanced placement, choose the number of local MPI ranks as a multiple of `visible_device_count * tasks_per_gpu`.  On a node with two visible GPUs and `--tasks-per-gpu 2`, ranks 0-1 map to GPU 0 and ranks 2-3 map to GPU 1.  If 10 local ranks are launched, the pattern cycles and maps ranks 0,1,4,5,8,9 to GPU 0 and ranks 2,3,6,7 to GPU 1.
+
+The current CUDA path assigns different frequency points to different ranks and gives each rank its own GPU-resident screening workspace.  It does not distribute one `W_c` or `epsilon` matrix across multiple GPUs.
 
 ## Current command-line backend names
 
