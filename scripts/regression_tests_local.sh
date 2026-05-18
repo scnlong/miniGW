@@ -36,6 +36,6 @@ ctest -L "mpi" -LE "cuda|scalapack|cosma" -j1 --output-on-failure | tee -a ../re
 
 echo " " | tee -a ../regression_tests.log
 echo "== SCALAPACK CPU ==" | tee -a ../regression_tests.log
-export OMP_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
+export OMP_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=4
 ctest -L "mpi" -L "scalapack" -LE "cuda|cosma" -j1 --output-on-failure | tee -a ../regression_tests.log
