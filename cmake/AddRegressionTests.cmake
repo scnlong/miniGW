@@ -198,8 +198,8 @@ function(gw_add_h2o_blas_lapack_test)
         NAME blas_lapack_h2o_reference_compute
         COMMAND
             ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=${GW_TEST_MPI_RANKS}
+            OMP_NUM_THREADS=4
+            OPENBLAS_NUM_THREADS=4
             $<TARGET_FILE:gw>
             --input-dir "${GW_REFERENCE_H2O_DIR}"
             --freq-points 200
@@ -260,8 +260,8 @@ function(gw_add_h2o_mpi_blas_lapack_test)
         NAME mpi_h2o_reference_compute
         COMMAND
             ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=1
+            OMP_NUM_THREADS=2
+            OPENBLAS_NUM_THREADS=2
             ${GW_TEST_MPI_LAUNCHER}
             ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
             $<TARGET_FILE:gw>
@@ -324,8 +324,8 @@ function(gw_add_h2o_scalapack_test)
         NAME scalapack_h2o_reference_compute
         COMMAND
             ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=1
+            OMP_NUM_THREADS=2
+            OPENBLAS_NUM_THREADS=2
             ${GW_TEST_MPI_LAUNCHER}
             ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
             $<TARGET_FILE:gw>
@@ -388,8 +388,8 @@ function(gw_add_h2o_cosma_cuda_test)
         NAME cosma_cuda_h2o_reference_compute
         COMMAND
             ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=1
+            OMP_NUM_THREADS=2
+            OPENBLAS_NUM_THREADS=2
             ${GW_COSMA_CUDA_TEST_ENV}
             ${GW_TEST_MPI_LAUNCHER}
             ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
@@ -519,8 +519,8 @@ function(gw_add_h2o_cublas_mpi_test)
         NAME h2o_cublas_mpi_compute
         COMMAND
             ${CMAKE_COMMAND} -E env
-            OMP_NUM_THREADS=1
-            OPENBLAS_NUM_THREADS=1
+            OMP_NUM_THREADS=2
+            OPENBLAS_NUM_THREADS=2
             ${GW_TEST_MPI_LAUNCHER}
             ${GW_TEST_MPI_NUMPROC_FLAG} ${GW_TEST_MPI_RANKS}
             $<TARGET_FILE:gw>
