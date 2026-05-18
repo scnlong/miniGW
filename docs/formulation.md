@@ -187,7 +187,7 @@ The formulation above is shared by all execution paths.  The implementation diff
 | Path | Screening matrix ownership | GEMM / inversion provider |
 |---|---|---|
 | Reference | replicated host | internal reference backend |
-| BLAS/LAPACK | replicated host | CBLAS/LAPACKE |
+| BLAS/LAPACK | replicated host | Fortran BLAS/LAPACK |
 | MPI frequency distribution | replicated per MPI rank | local backend per assigned frequency |
 | ScaLAPACK | BLACS block-cyclic distributed | ScaLAPACK/PBLAS |
 | COSMA | distributed screening matrices | COSMA `cosma_pzgemm_` for GEMM; ScaLAPACK for remaining distributed solve/factorization infrastructure |

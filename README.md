@@ -71,7 +71,7 @@ miniGW always requires:
 Optional C++/HPC dependencies:
 
 - OpenMP, if `GW_ENABLE_OPENMP=ON`;
-- BLAS, LAPACK, CBLAS, and LAPACKE, if `GW_ENABLE_BLAS_LAPACK=ON`;
+- BLAS and LAPACK, if `GW_ENABLE_BLAS_LAPACK=ON`;
 - MPI, if `GW_ENABLE_MPI=ON`;
 - ScaLAPACK/BLACS, if `GW_ENABLE_SCALAPACK=ON`;
 - COSMA with its GPU-enabled dependency stack, if `GW_ENABLE_COSMA=ON`;
@@ -98,7 +98,6 @@ sudo apt-get install -y \
   libhdf5-dev \
   libopenblas-dev \
   liblapack-dev \
-  liblapacke-dev \
   libopenmpi-dev \
   openmpi-bin \
   libscalapack-openmpi-dev
@@ -288,11 +287,13 @@ Example:
 
 ### BLAS/LAPACK backend
 
-`--linalg-backend blas-lapack` uses CBLAS/LAPACKE for replicated host matrices:
+`--linalg-backend blas-lapack` uses the BLAS/LAPACK provider selected by CMake for replicated host matrices:
 
-- `cblas_zgemm` for dense complex GEMM;
-- `cblas_zgemv` for dense complex GEMV;
-- `LAPACKE_zgetrf` and `LAPACKE_zgetrs` to obtain inverse matrices by solving against the identity, avoiding the more fragile `zgetri` path.
+- Fortran BLAS `zgemm_` for dense complex GEMM;
+- Fortran BLAS `zgemv_` for dense complex GEMV;
+- Fortran LAPACK `zgetrf_` and `zgetrs_` to obtain inverse matrices by solving against the identity, avoiding both the more fragile `zgetri` path and mixed LAPACKE/provider runtime linkage.
+
+The backend intentionally does not link CBLAS or `liblapacke`. This keeps GEMM, GEMV, and LU/solve on the same BLAS/LAPACK implementation chosen by CMake, for example OpenBLAS or Intel oneMKL through `BLA_VENDOR`.
 
 Configure with:
 

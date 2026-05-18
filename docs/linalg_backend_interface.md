@@ -113,10 +113,10 @@ src/linalg/linalg_blas_lapack.cpp
 
 The BLAS/LAPACK backend operates on replicated host `MatrixComplex` objects.  It uses:
 
-- CBLAS for dense GEMM/GEMV;
-- LAPACKE for LU factorization and inversion/solve operations.
+- Fortran BLAS `zgemm_` and `zgemv_` for dense GEMM/GEMV;
+- Fortran LAPACK `zgetrf_` and `zgetrs_` for LU factorization and inversion/solve operations.
 
-Because miniGW stores matrices in row-major order, the wrapper must translate transpose flags and leading dimensions carefully.
+Because miniGW stores matrices in row-major order, the wrapper must translate transpose flags, multiplication order, and leading dimensions carefully.  The implementation calls the Fortran BLAS/LAPACK ABI directly instead of linking CBLAS or `liblapacke`, so dense kernels and LU/solve routines come from the same provider selected by CMake.
 
 ### ScaLAPACK backend
 

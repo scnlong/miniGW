@@ -1,12 +1,47 @@
 #include "linalg/linalg_blas_lapack.hpp"
 
-#include <cblas.h>
-#include <lapacke.h>
-
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+extern "C" {
+void zgemm_(const char* transa,
+            const char* transb,
+            const int* m,
+            const int* n,
+            const int* k,
+            const gw::Complex* alpha,
+            const gw::Complex* a,
+            const int* lda,
+            const gw::Complex* b,
+            const int* ldb,
+            const gw::Complex* beta,
+            gw::Complex* c,
+            const int* ldc);
+void zgemv_(const char* trans,
+            const int* m,
+            const int* n,
+            const gw::Complex* alpha,
+            const gw::Complex* a,
+            const int* lda,
+            const gw::Complex* x,
+            const int* incx,
+            const gw::Complex* beta,
+            gw::Complex* y,
+            const int* incy);
+void zgetrf_(const int* m, const int* n, gw::Complex* a, const int* lda, int* ipiv, int* info);
+void zgetrs_(const char* trans,
+             const int* n,
+             const int* nrhs,
+             const gw::Complex* a,
+             const int* lda,
+             const int* ipiv,
+             gw::Complex* b,
+             const int* ldb,
+             int* info);
+}
 
 namespace gw::linalg {
 namespace {
@@ -19,44 +54,40 @@ namespace {
     return trans == MatrixTranspose::NoTranspose ? a.cols() : a.rows();
 }
 
-[[nodiscard]] CBLAS_TRANSPOSE to_cblas_transpose(MatrixTranspose trans) {
+[[nodiscard]] char to_fortran_transpose(MatrixTranspose trans) {
     switch (trans) {
         case MatrixTranspose::NoTranspose:
-            return CblasNoTrans;
+            return 'N';
         case MatrixTranspose::Transpose:
-            return CblasTrans;
+            return 'T';
         case MatrixTranspose::ConjugateTranspose:
-            return CblasConjTrans;
+            return 'C';
     }
     throw std::runtime_error("unknown MatrixTranspose value");
 }
 
 [[nodiscard]] int checked_blas_int(std::size_t value, const char* name) {
     if (value > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        throw std::runtime_error(std::string(name) + " exceeds the CBLAS int range");
+        throw std::runtime_error(std::string(name) + " exceeds the BLAS integer range");
     }
     return static_cast<int>(value);
 }
 
-[[nodiscard]] lapack_int checked_lapack_int(std::size_t value, const char* name) {
-    if (value > static_cast<std::size_t>(std::numeric_limits<lapack_int>::max())) {
+[[nodiscard]] int checked_lapack_int(std::size_t value, const char* name) {
+    if (value > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         throw std::runtime_error(std::string(name) + " exceeds the LAPACK integer range");
     }
-    return static_cast<lapack_int>(value);
+    return static_cast<int>(value);
 }
 
-[[nodiscard]] lapack_complex_double* lapack_ptr(std::vector<Complex>& data) noexcept {
-    return reinterpret_cast<lapack_complex_double*>(data.data());
-}
-
-void validate_lu_pivots(const std::vector<lapack_int>& ipiv, lapack_int n) {
+void validate_lu_pivots(const std::vector<int>& ipiv, int n) {
     for (std::size_t i = 0; i < ipiv.size(); ++i) {
         if (ipiv[i] < 1 || ipiv[i] > n) {
             throw std::runtime_error(
-                "LAPACKE_zgetrf: pivot array contains an invalid entry at position " +
+                "zgetrf_: pivot array contains an invalid entry at position " +
                 std::to_string(i) + ": ipiv=" + std::to_string(ipiv[i]) +
                 ", expected a 1-based index in [1," + std::to_string(n) +
-                "]. This usually indicates a broken BLAS/LAPACK/LAPACKE integer ABI "
+                "]. This usually indicates a broken BLAS/LAPACK integer ABI "
                 "or mixed runtime-library linkage.");
         }
     }
@@ -77,31 +108,32 @@ MatrixComplex BlasLapackBackend::inverse(MatrixComplex a) const {
         throw std::runtime_error("BlasLapackBackend::inverse: matrix must be square");
     }
 
-    const lapack_int n = checked_lapack_int(a.rows(), "matrix dimension");
-    const lapack_int lda = n;
-    std::vector<lapack_int> ipiv(static_cast<std::size_t>(n));
+    const int n = checked_lapack_int(a.rows(), "matrix dimension");
+    const int lda = n;
+    std::vector<int> ipiv(static_cast<std::size_t>(n));
 
-    lapack_int info = LAPACKE_zgetrf(LAPACK_ROW_MAJOR, n, n, lapack_ptr(a.data()), lda, ipiv.data());
+    int info = 0;
+    zgetrf_(&n, &n, a.data().data(), &lda, ipiv.data(), &info);
     if (info < 0) {
-        throw std::runtime_error("LAPACKE_zgetrf: argument " + std::to_string(-info) + " had an illegal value");
+        throw std::runtime_error("zgetrf_: argument " + std::to_string(-info) + " had an illegal value");
     }
     if (info > 0) {
-        throw std::runtime_error("LAPACKE_zgetrf: matrix is singular at U(" + std::to_string(info) + "," + std::to_string(info) + ")");
+        throw std::runtime_error("zgetrf_: matrix is singular at U(" + std::to_string(info) + "," + std::to_string(info) + ")");
     }
     validate_lu_pivots(ipiv, n);
 
     MatrixComplex inv(static_cast<std::size_t>(n), static_cast<std::size_t>(n), Complex{0.0, 0.0});
-    for (lapack_int i = 0; i < n; ++i) {
+    for (int i = 0; i < n; ++i) {
         inv(static_cast<std::size_t>(i), static_cast<std::size_t>(i)) = Complex{1.0, 0.0};
     }
 
-    // Compute the inverse by solving A * X = I with the LU factors.  This keeps
-    // the local backend aligned with the ScaLAPACK implementation, which also
-    // uses getrf + getrs, and avoids the additional LAPACKE_zgetri row-swap path
-    // that is fragile in mixed MKL/FlexiBLAS LAPACKE environments.
-    info = LAPACKE_zgetrs(LAPACK_ROW_MAJOR, 'N', n, n, lapack_ptr(a.data()), lda, ipiv.data(), lapack_ptr(inv.data()), n);
+    // MatrixComplex is row-major.  Fortran LAPACK sees the same buffer as the
+    // transpose, so solving A^T X = I in column-major storage leaves A^{-1}
+    // in the original row-major layout.
+    const char trans = 'N';
+    zgetrs_(&trans, &n, &n, a.data().data(), &lda, ipiv.data(), inv.data().data(), &n, &info);
     if (info < 0) {
-        throw std::runtime_error("LAPACKE_zgetrs: argument " + std::to_string(-info) + " had an illegal value");
+        throw std::runtime_error("zgetrs_: argument " + std::to_string(-info) + " had an illegal value");
     }
 
     return inv;
@@ -123,20 +155,29 @@ MatrixComplex BlasLapackBackend::gemm(const MatrixComplex& a,
     const Complex alpha{1.0, 0.0};
     const Complex beta{0.0, 0.0};
 
-    cblas_zgemm(CblasRowMajor,
-                to_cblas_transpose(trans_a),
-                to_cblas_transpose(trans_b),
-                checked_blas_int(m, "m"),
-                checked_blas_int(n, "n"),
-                checked_blas_int(k_a, "k"),
-                &alpha,
-                a.data().data(),
-                checked_blas_int(a.cols(), "lda"),
-                b.data().data(),
-                checked_blas_int(b.cols(), "ldb"),
-                &beta,
-                c.data().data(),
-                checked_blas_int(c.cols(), "ldc"));
+    // Row-major C = op(A) op(B) is represented to Fortran BLAS as
+    // C^T = op(B)^T op(A)^T over the same buffers.
+    const char transa = to_fortran_transpose(trans_b);
+    const char transb = to_fortran_transpose(trans_a);
+    const int fm = checked_blas_int(n, "m");
+    const int fn = checked_blas_int(m, "n");
+    const int fk = checked_blas_int(k_a, "k");
+    const int lda = checked_blas_int(b.cols(), "lda");
+    const int ldb = checked_blas_int(a.cols(), "ldb");
+    const int ldc = checked_blas_int(c.cols(), "ldc");
+    zgemm_(&transa,
+           &transb,
+           &fm,
+           &fn,
+           &fk,
+           &alpha,
+           b.data().data(),
+           &lda,
+           a.data().data(),
+           &ldb,
+           &beta,
+           c.data().data(),
+           &ldc);
 
     return c;
 }
@@ -159,18 +200,21 @@ std::vector<Complex> BlasLapackBackend::gemv(const MatrixComplex& a,
     const Complex alpha{1.0, 0.0};
     const Complex beta{0.0, 0.0};
 
-    cblas_zgemv(CblasRowMajor,
-                to_cblas_transpose(trans_a),
-                checked_blas_int(a.rows(), "a.rows"),
-                checked_blas_int(a.cols(), "a.cols"),
-                &alpha,
-                a.data().data(),
-                checked_blas_int(a.cols(), "lda"),
-                x_complex.data(),
-                1,
-                &beta,
-                y.data(),
-                1);
+    const int rows = checked_blas_int(a.rows(), "a.rows");
+    const int cols = checked_blas_int(a.cols(), "a.cols");
+    const int lda = cols;
+    const int inc = 1;
+
+    if (trans_a == MatrixTranspose::NoTranspose) {
+        const char trans = 'T';
+        zgemv_(&trans, &cols, &rows, &alpha, a.data().data(), &lda, x_complex.data(), &inc, &beta, y.data(), &inc);
+    } else {
+        const char trans = 'N';
+        zgemv_(&trans, &cols, &rows, &alpha, a.data().data(), &lda, x_complex.data(), &inc, &beta, y.data(), &inc);
+        if (trans_a == MatrixTranspose::ConjugateTranspose) {
+            std::transform(y.begin(), y.end(), y.begin(), [](Complex value) { return std::conj(value); });
+        }
+    }
 
     return y;
 }

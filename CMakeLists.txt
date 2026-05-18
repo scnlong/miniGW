@@ -11,7 +11,7 @@ option(GW_ENABLE_OPENMP_KERNEL_LOOPS "Enable OpenMP in local kernel loops" ON)
 option(GW_ENABLE_OPENMP_FREQUENCY_PARALLEL "Enable experimental OpenMP parallelism over outer frequency points" ON)
 option(GW_ENABLE_MPI "Enable MPI support and MPI frequency distribution" ON)
 
-option(GW_ENABLE_BLAS_LAPACK "Build/link a CBLAS/LAPACKE dense CPU backend" ON)
+option(GW_ENABLE_BLAS_LAPACK "Build/link a BLAS/LAPACK dense CPU backend" ON)
 option(GW_ENABLE_SCALAPACK "Build/link a ScaLAPACK replicated-wrapper backend" ON)
 option(GW_ENABLE_COSMA "Enable explicit COSMA prefixed pxgemm backend, using cosma_pzgemm_ for distributed GEMM" OFF)
 option(GW_ENABLE_CUDA "Build/link a CUDA cuBLAS/cuSolver backend" OFF)
@@ -108,10 +108,6 @@ if(GW_ENABLE_BLAS_LAPACK)
     find_package(BLAS REQUIRED)
     find_package(LAPACK REQUIRED)
 
-    find_path(CBLAS_INCLUDE_DIR cblas.h REQUIRED)
-    find_path(LAPACKE_INCLUDE_DIR lapacke.h REQUIRED)
-    find_library(LAPACKE_LIBRARY lapacke REQUIRED)
-
     add_library(gw_linalg_blas_lapack
         src/linalg/linalg_blas_lapack.cpp
     )
@@ -119,16 +115,12 @@ if(GW_ENABLE_BLAS_LAPACK)
     target_include_directories(gw_linalg_blas_lapack
         PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include
-        PRIVATE
-            ${CBLAS_INCLUDE_DIR}
-            ${LAPACKE_INCLUDE_DIR}
     )
 
     target_link_libraries(gw_linalg_blas_lapack
         PUBLIC
             BLAS::BLAS
             LAPACK::LAPACK
-            ${LAPACKE_LIBRARY}
     )
 
     target_compile_definitions(gw_linalg_blas_lapack
