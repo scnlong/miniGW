@@ -49,6 +49,19 @@ namespace {
     return reinterpret_cast<lapack_complex_double*>(data.data());
 }
 
+void validate_lu_pivots(const std::vector<lapack_int>& ipiv, lapack_int n) {
+    for (std::size_t i = 0; i < ipiv.size(); ++i) {
+        if (ipiv[i] < 1 || ipiv[i] > n) {
+            throw std::runtime_error(
+                "LAPACKE_zgetrf: pivot array contains an invalid entry at position " +
+                std::to_string(i) + ": ipiv=" + std::to_string(ipiv[i]) +
+                ", expected a 1-based index in [1," + std::to_string(n) +
+                "]. This usually indicates a broken BLAS/LAPACK/LAPACKE integer ABI "
+                "or mixed runtime-library linkage.");
+        }
+    }
+}
+
 } // namespace
 
 std::string_view BlasLapackBackend::name() const noexcept {
@@ -75,16 +88,23 @@ MatrixComplex BlasLapackBackend::inverse(MatrixComplex a) const {
     if (info > 0) {
         throw std::runtime_error("LAPACKE_zgetrf: matrix is singular at U(" + std::to_string(info) + "," + std::to_string(info) + ")");
     }
+    validate_lu_pivots(ipiv, n);
 
-    info = LAPACKE_zgetri(LAPACK_ROW_MAJOR, n, lapack_ptr(a.data()), lda, ipiv.data());
+    MatrixComplex inv(static_cast<std::size_t>(n), static_cast<std::size_t>(n), Complex{0.0, 0.0});
+    for (lapack_int i = 0; i < n; ++i) {
+        inv(static_cast<std::size_t>(i), static_cast<std::size_t>(i)) = Complex{1.0, 0.0};
+    }
+
+    // Compute the inverse by solving A * X = I with the LU factors.  This keeps
+    // the local backend aligned with the ScaLAPACK implementation, which also
+    // uses getrf + getrs, and avoids the additional LAPACKE_zgetri row-swap path
+    // that is fragile in mixed MKL/FlexiBLAS LAPACKE environments.
+    info = LAPACKE_zgetrs(LAPACK_ROW_MAJOR, 'N', n, n, lapack_ptr(a.data()), lda, ipiv.data(), lapack_ptr(inv.data()), n);
     if (info < 0) {
-        throw std::runtime_error("LAPACKE_zgetri: argument " + std::to_string(-info) + " had an illegal value");
-    }
-    if (info > 0) {
-        throw std::runtime_error("LAPACKE_zgetri: matrix is singular at U(" + std::to_string(info) + "," + std::to_string(info) + ")");
+        throw std::runtime_error("LAPACKE_zgetrs: argument " + std::to_string(-info) + " had an illegal value");
     }
 
-    return a;
+    return inv;
 }
 
 MatrixComplex BlasLapackBackend::gemm(const MatrixComplex& a,

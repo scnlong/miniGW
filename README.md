@@ -292,7 +292,7 @@ Example:
 
 - `cblas_zgemm` for dense complex GEMM;
 - `cblas_zgemv` for dense complex GEMV;
-- `LAPACKE_zgetrf` and `LAPACKE_zgetri` for the current inverse-based path.
+- `LAPACKE_zgetrf` and `LAPACKE_zgetrs` to obtain inverse matrices by solving against the identity, avoiding the more fragile `zgetri` path.
 
 Configure with:
 
