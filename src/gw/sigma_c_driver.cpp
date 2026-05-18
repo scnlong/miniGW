@@ -570,10 +570,12 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
     if (root_rank(settings)) {
         std::cout << "Shape of V_ph matrix: (" << v_ph.rows() << ", " << v_ph.cols() << ")\n";
     }
-    MatrixComplex inv_v = linalg_backend.inverse(to_complex(v_ph));
+    // Do not invert V_ph here.  V_ph is often numerically singular/ill-conditioned
+    // in realistic particle-hole spaces; the screening workspace forms W_c via
+    // (I - diag(Pi0) V_ph)^(-1) diag(Pi0) instead.
     timings.build_inv_v_seconds = elapsed_seconds(local_start, Clock::now());
 
-    workspace::HostScreeningWorkspace screening(std::move(v_ph), std::move(inv_v), linalg_backend);
+    workspace::HostScreeningWorkspace screening(std::move(v_ph), linalg_backend);
     if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {
         compute_sigma_c_openmp_frequency(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
                                          states, settings, sigma_c_im_points, timings);
