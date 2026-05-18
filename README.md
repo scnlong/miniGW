@@ -6,7 +6,7 @@
 
 # miniGW
 
-miniGW is a compact molecular G0W0 code written in modern C++20. It uses PySCF to generate the DFT starting-point data and reads the resulting molecular-orbital quantities from a single HDF5 input file.
+miniGW is a compact molecular G0W0 code written in modern C++. It uses PySCF to generate the DFT starting-point data and reads the resulting molecular-orbital quantities from a single HDF5 input file.
 
 The code is intended as a development and experimentation platform for molecular GW workflows, linear-algebra backend integration, MPI frequency distribution, distributed ScaLAPACK/COSMA screening paths, and CUDA-accelerated GPU-resident screening workspaces.
 
