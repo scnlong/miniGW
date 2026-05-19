@@ -165,7 +165,7 @@ The historical right-dielectric form used column scaling by the diagonal indepen
 epsilon_right[row, col] = delta[row, col] - V_ph[row, col] * Pi0[col]
 ```
 
-The current host, ScaLAPACK, and COSMA screening workspaces avoid explicitly forming `V_ph^{-1}`. They instead build the left-dielectric form
+The current host, CUDA device-resident, ScaLAPACK, and COSMA screening workspaces avoid explicitly forming `V_ph^{-1}`. They instead build the left-dielectric form
 
 ```text
 epsilon_left[row, col] = delta[row, col] - Pi0[row] * V_ph[row, col]
@@ -224,9 +224,10 @@ This removes the full resident `pq_ph(nmo,nmo,nph)` tensor, but it does not yet 
 | `mo_energy` | replicated host | Small vector. |
 | `vxc_mo` | replicated host | Small/medium dense matrix. |
 | `eri_mo` | replicated host | Main remaining scaling limitation. |
-| `V_ph`, `epsilon`, `W_c` in local path | replicated host | Uses `MatrixReal` / `MatrixComplex`. |
-| `V_ph`, `epsilon`, `W_c` in ScaLAPACK path | BLACS block-cyclic distributed | CPU distributed path. |
-| `V_ph`, `epsilon`, `W_c` in COSMA path | BLACS/COSMA distributed | Intended multi-node/multi-GPU distributed GEMM provider. |
+| `V_ph`, left dielectric matrix, `W_c` in local path | replicated host | Uses `MatrixReal` / `MatrixComplex`. |
+| `V_ph`, left dielectric matrix, `W_c` in ScaLAPACK path | BLACS block-cyclic distributed | CPU distributed path. |
+| `V_ph`, left dielectric matrix, `W_c` in COSMA path | BLACS/COSMA distributed | Intended multi-node/multi-GPU distributed GEMM provider. |
+| `V_ph`, left dielectric matrix, `W_c` in CUDA device-resident path | GPU device memory | Uses `DeviceScreeningWorkspace`; no device `inv(V_ph)` is stored. |
 | CUDA device screening workspace | per-rank device-resident dense matrices | Still starts from replicated host input; does not distribute one screening matrix across multiple GPUs. |
 | `pq_ph` | panel-generated | Full tensor is not materialized in the main workflow. |
 

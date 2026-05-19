@@ -46,7 +46,7 @@ struct GwTimings {
     double total_wall_seconds{0.0};
     double exchange_seconds{0.0};
     double build_mapping_seconds{0.0};
-    double build_inv_v_seconds{0.0};
+    double screening_setup_seconds{0.0};
     double build_pi0_seconds{0.0};        // accumulated thread/rank time in parallel modes
     double invert_epsilon_seconds{0.0};  // accumulated thread/rank time in parallel modes
     double sigma_c_seconds{0.0};         // accumulated thread/rank time in parallel modes

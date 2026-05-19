@@ -489,7 +489,7 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
         MatrixReal v_ph = calculate_v_ph_matrix(integrals, ph_basis);
         workspace::DeviceScreeningWorkspace screening(v_ph);
         workspace::DevicePqPhPanelView device_pq_ph_view(integrals, ph_basis, cuda_settings.contraction_panel_size);
-        timings.build_inv_v_seconds = elapsed_seconds(device_start, Clock::now());
+        timings.screening_setup_seconds = elapsed_seconds(device_start, Clock::now());
         if (root_rank(cuda_settings)) {
             std::cout << "CUDA screening workspace estimated device allocation after setup: "
                       << static_cast<double>(screening.estimated_device_bytes()) / (1024.0 * 1024.0)
@@ -540,7 +540,7 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
                                                                     ph_basis,
                                                                     64,
                                                                     settings.execution.frequency_group_size);
-            timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
+            timings.screening_setup_seconds = elapsed_seconds(distributed_start, Clock::now());
             compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
                                                   states, settings, sigma_c_im_points, timings);
 #else
@@ -552,7 +552,7 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
                                                                ph_basis,
                                                                64,
                                                                settings.execution.frequency_group_size);
-            timings.build_inv_v_seconds = elapsed_seconds(distributed_start, Clock::now());
+            timings.screening_setup_seconds = elapsed_seconds(distributed_start, Clock::now());
             compute_sigma_c_distributed_screening(orbitals, ph_basis, screening, pq_ph_view, omega_im, weights,
                                                   states, settings, sigma_c_im_points, timings);
         }
@@ -573,7 +573,7 @@ void compute_sigma_c_with_backend(const OrbitalSpace& orbitals,
     // Do not invert V_ph here.  V_ph is often numerically singular/ill-conditioned
     // in realistic particle-hole spaces; the screening workspace forms W_c via
     // (I - diag(Pi0) V_ph)^(-1) diag(Pi0) instead.
-    timings.build_inv_v_seconds = elapsed_seconds(local_start, Clock::now());
+    timings.screening_setup_seconds = elapsed_seconds(local_start, Clock::now());
 
     workspace::HostScreeningWorkspace screening(std::move(v_ph), linalg_backend);
     if (settings.execution.frequency_parallel_mode == FrequencyParallelMode::OpenMP) {

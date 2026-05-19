@@ -17,7 +17,7 @@ namespace gw::linalg {
 // In the main GW executable, selecting --linalg-backend cublas creates this
 // backend through the backend factory.  Its capabilities identify it as a
 // device-memory backend, after which the GW driver switches to the dedicated
-// DeviceScreeningWorkspace path for GPU-resident V_ph/epsilon/W_c matrices and
+// DeviceScreeningWorkspace path for GPU-resident V_ph/left-dielectric/W_c matrices and
 // contraction panels.  The backend itself is not a distributed-MPI matrix
 // backend; MPI+CUDA parallelism is implemented outside this class by assigning
 // different frequency points to different ranks.

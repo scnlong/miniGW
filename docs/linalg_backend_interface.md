@@ -167,7 +167,7 @@ COSMA is used for distributed GEMM operations, including:
 Y = W_c X
 ```
 
-The COSMA screening workspace uses the same no-`inv(V_ph)` formulation as the host and ScaLAPACK workspaces:
+The COSMA and CUDA device-resident screening workspaces use the same no-`inv(V_ph)` formulation as the host and ScaLAPACK workspaces:
 
 ```text
 W_c = (I - diag(Pi0) V_ph)^(-1) diag(Pi0).
@@ -193,7 +193,7 @@ src/workspace/device_pq_ph_panel.cu
 There are two CUDA-related layers:
 
 1. A lower-level cuBLAS/cuSolver backend that implements generic backend operations with host-wrapper semantics. It remains useful as a factory-created `gw::linalg::Backend` object and as a capability carrier for `--linalg-backend cublas`.
-2. A GW-specific `DeviceScreeningWorkspace` that keeps `V_ph`, `epsilon`, `W_c`, solver workspaces, and contraction panels device-resident across frequency points.
+2. A GW-specific `DeviceScreeningWorkspace` that keeps `V_ph`, the left dielectric matrix `I - diag(Pi0) V_ph`, `W_c`, solver workspaces, and contraction panels device-resident across frequency points. It does not explicitly construct or store `inv(V_ph)` on the GPU.
 
 The second layer is the preferred CUDA path.  The lower-level host-wrapper API is useful for integration and correctness testing, but hiding host-device copies inside every small backend call is not the desired high-performance design. The cuBLAS path is per-rank: it does not distribute one screening matrix across multiple GPUs.
 

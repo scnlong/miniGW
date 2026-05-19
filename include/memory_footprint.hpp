@@ -39,7 +39,6 @@ struct MemoryFootprint {
     long double frequency_grid_bytes{};
 
     // Per-frequency small work arrays.
-    long double inv_v_bytes{};
     long double pi0_diag_bytes{};
     long double pk_vec_bytes{};
     long double pk_panel_bytes{};
@@ -56,9 +55,7 @@ struct MemoryFootprint {
     // the selected backend advertises device memory.  They estimate GPU memory,
     // not host RAM.
     long double device_v_ph_bytes{};
-    long double device_inv_v_bytes{};
     long double device_epsilon_bytes{};
-    long double device_inv_eps_bytes{};
     long double device_w_c_bytes{};
     long double device_pi0_bytes{};
     long double device_solver_workspace_bytes{};

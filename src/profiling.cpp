@@ -19,7 +19,7 @@ void output_profiling_baseline(double read_input_seconds, const GwTimings& timin
     std::cout << std::left << std::setw(22) << "total GW wall:" << std::right << std::setw(8) << timings.total_wall_seconds << " s\n";
     std::cout << std::left << std::setw(22) << "build mapping:" << std::right << std::setw(8) << timings.build_mapping_seconds << " s\n";
     std::cout << std::left << std::setw(22) << "exchange:" << std::right << std::setw(8) << timings.exchange_seconds << " s\n";
-    std::cout << std::left << std::setw(22) << "screening setup:" << std::right << std::setw(8) << timings.build_inv_v_seconds << " s\n";
+    std::cout << std::left << std::setw(22) << "screening setup:" << std::right << std::setw(8) << timings.screening_setup_seconds << " s\n";
     std::cout << std::left << std::setw(22) << "build Pi0 accum:" << std::right << std::setw(8) << timings.build_pi0_seconds << " s\n";
     std::cout << std::left << std::setw(22) << "build W_c accum:" << std::right << std::setw(8) << timings.invert_epsilon_seconds << " s\n";
     std::cout << std::left << std::setw(22) << "sigma_c accum:" << std::right << std::setw(8) << timings.sigma_c_seconds << " s\n";

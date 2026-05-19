@@ -18,10 +18,12 @@ namespace gw::workspace {
 // cudaMalloc/cudaMemcpy/cudaFree traffic.  DeviceScreeningWorkspace keeps the
 // screening matrices and solver workspaces on the GPU across frequencies:
 //
-//   V_ph(device), inv(V_ph)(device), epsilon(device), W_c(device)
+//   V_ph(device), epsilon_left(device), W_c(device)
 //
-// Per frequency it uploads only pi0_diag, rebuilds epsilon on the device,
-// factorizes/solves there, and keeps W_c resident for panel contractions.
+// Per frequency it uploads only pi0_diag, rebuilds
+// epsilon_left = I - diag(Pi0) V_ph on the device, solves for
+// W_c = epsilon_left^{-1} diag(Pi0), and keeps W_c resident for panel
+// contractions.  It does not explicitly construct inv(V_ph).
 class DeviceScreeningWorkspace {
 public:
     explicit DeviceScreeningWorkspace(const MatrixReal& v_ph);

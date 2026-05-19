@@ -113,7 +113,7 @@ void add_timings(GwTimings& dst, const GwTimings& src) {
     dst.total_wall_seconds += src.total_wall_seconds;
     dst.exchange_seconds += src.exchange_seconds;
     dst.build_mapping_seconds += src.build_mapping_seconds;
-    dst.build_inv_v_seconds += src.build_inv_v_seconds;
+    dst.screening_setup_seconds += src.screening_setup_seconds;
     dst.build_pi0_seconds += src.build_pi0_seconds;
     dst.invert_epsilon_seconds += src.invert_epsilon_seconds;
     dst.sigma_c_seconds += src.sigma_c_seconds;

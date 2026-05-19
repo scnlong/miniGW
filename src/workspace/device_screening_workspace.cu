@@ -206,10 +206,10 @@ private:
     return out;
 }
 
-__global__ void build_epsilon_kernel(const cuDoubleComplex* __restrict__ v_ph,
-                                     const cuDoubleComplex* __restrict__ pi0,
-                                     cuDoubleComplex* __restrict__ epsilon,
-                                     int n) {
+__global__ void build_left_dielectric_kernel(const cuDoubleComplex* __restrict__ v_ph,
+                                                const cuDoubleComplex* __restrict__ pi0,
+                                                cuDoubleComplex* __restrict__ epsilon_left,
+                                                int n) {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     const int total = n * n;
     if (idx >= total) {
@@ -218,21 +218,28 @@ __global__ void build_epsilon_kernel(const cuDoubleComplex* __restrict__ v_ph,
     const int row = idx % n;
     const int col = idx / n;
     const cuDoubleComplex v = v_ph[idx];
-    const cuDoubleComplex p = pi0[col];
-    cuDoubleComplex value = make_cuDoubleComplex(-(cuCreal(v) * cuCreal(p) - cuCimag(v) * cuCimag(p)),
-                                                 -(cuCreal(v) * cuCimag(p) + cuCimag(v) * cuCreal(p)));
+    const cuDoubleComplex p = pi0[row];
+    cuDoubleComplex value = make_cuDoubleComplex(-(cuCreal(p) * cuCreal(v) - cuCimag(p) * cuCimag(v)),
+                                                 -(cuCreal(p) * cuCimag(v) + cuCimag(p) * cuCreal(v)));
     if (row == col) {
         value = cuCadd(value, make_cuDoubleComplex(1.0, 0.0));
     }
-    epsilon[idx] = value;
+    epsilon_left[idx] = value;
 }
 
-__global__ void subtract_identity_kernel(cuDoubleComplex* __restrict__ a, int n) {
-    const int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < n) {
-        const int idx = i + i * n;
-        a[idx] = cuCsub(a[idx], make_cuDoubleComplex(1.0, 0.0));
+__global__ void scale_columns_by_pi0_kernel(cuDoubleComplex* __restrict__ a,
+                                            const cuDoubleComplex* __restrict__ pi0,
+                                            int n) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total = n * n;
+    if (idx >= total) {
+        return;
     }
+    const int col = idx / n;
+    const cuDoubleComplex value = a[idx];
+    const cuDoubleComplex p = pi0[col];
+    a[idx] = make_cuDoubleComplex(cuCreal(value) * cuCreal(p) - cuCimag(value) * cuCimag(p),
+                                  cuCreal(value) * cuCimag(p) + cuCimag(value) * cuCreal(p));
 }
 
 __global__ void quadratic_forms_kernel(const cuDoubleComplex* __restrict__ x,
@@ -289,9 +296,7 @@ struct DeviceScreeningWorkspace::Impl {
 
         const std::size_t n2 = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
         d_v_ph.allocate(n2);
-        d_inv_v.allocate(n2);
         d_epsilon.allocate(n2);
-        d_inv_eps.allocate(n2);
         d_w_c.allocate(n2);
         d_pi0.allocate(static_cast<std::size_t>(n_));
         d_info.allocate(1);
@@ -302,7 +307,6 @@ struct DeviceScreeningWorkspace::Impl {
                               cudaMemcpyHostToDevice),
                    "cudaMemcpy(V_ph H2D)");
 
-        compute_inverse_of_v();
     }
 
     void ensure_solver_workspace() {
@@ -330,18 +334,6 @@ struct DeviceScreeningWorkspace::Impl {
         }
     }
 
-    void compute_inverse_of_v() {
-        const std::size_t n2 = static_cast<std::size_t>(n_) * static_cast<std::size_t>(n_);
-        check_cuda(cudaMemcpy(d_epsilon.get(), d_v_ph.get(), n2 * sizeof(cuDoubleComplex),
-                              cudaMemcpyDeviceToDevice),
-                   "cudaMemcpy(V_ph to factor buffer)");
-        const std::vector<cuDoubleComplex> h_i = identity_column_major(n_);
-        check_cuda(cudaMemcpy(d_inv_v.get(), h_i.data(), h_i.size() * sizeof(cuDoubleComplex),
-                              cudaMemcpyHostToDevice),
-                   "cudaMemcpy(I for inv_v)");
-        factorize_and_solve_identity(d_epsilon, d_inv_v);
-    }
-
     void compute_w_c(const std::vector<Complex>& pi0_diag) {
         if (pi0_diag.size() != static_cast<std::size_t>(n_)) {
             throw std::runtime_error("DeviceScreeningWorkspace::compute_w_c: inconsistent pi0 dimension");
@@ -356,37 +348,29 @@ struct DeviceScreeningWorkspace::Impl {
 
         const int threads = 256;
         const int blocks = (n_ * n_ + threads - 1) / threads;
-        build_epsilon_kernel<<<blocks, threads>>>(d_v_ph.get(), d_pi0.get(), d_epsilon.get(), n_);
-        check_cuda(cudaGetLastError(), "build_epsilon_kernel");
+        // Build the left dielectric matrix
+        //
+        //     epsilon_left = I - diag(Pi0) V_ph
+        //
+        // and solve epsilon_left * W_c = I on the device.  The final column
+        // scaling below applies the right factor diag(Pi0), giving
+        //
+        //     W_c = (I - diag(Pi0) V_ph)^(-1) diag(Pi0).
+        //
+        // This is algebraically equivalent to the old expression
+        // [(I - V_ph diag(Pi0))^(-1) - I]^T V_ph^(-1), for symmetric V_ph,
+        // but avoids explicitly constructing inv(V_ph).
+        build_left_dielectric_kernel<<<blocks, threads>>>(d_v_ph.get(), d_pi0.get(), d_epsilon.get(), n_);
+        check_cuda(cudaGetLastError(), "build_left_dielectric_kernel");
 
         const std::vector<cuDoubleComplex> h_i = identity_column_major(n_);
-        check_cuda(cudaMemcpy(d_inv_eps.get(), h_i.data(), h_i.size() * sizeof(cuDoubleComplex),
+        check_cuda(cudaMemcpy(d_w_c.get(), h_i.data(), h_i.size() * sizeof(cuDoubleComplex),
                               cudaMemcpyHostToDevice),
-                   "cudaMemcpy(I for inv_eps)");
-        factorize_and_solve_identity(d_epsilon, d_inv_eps);
+                   "cudaMemcpy(I for W_c solve RHS)");
+        factorize_and_solve_identity(d_epsilon, d_w_c);
 
-        const int diag_threads = 256;
-        const int diag_blocks = (n_ + diag_threads - 1) / diag_threads;
-        subtract_identity_kernel<<<diag_blocks, diag_threads>>>(d_inv_eps.get(), n_);
-        check_cuda(cudaGetLastError(), "subtract_identity_kernel");
-
-        const cuDoubleComplex alpha = make_cuDoubleComplex(1.0, 0.0);
-        const cuDoubleComplex beta = make_cuDoubleComplex(0.0, 0.0);
-        check_cublas(cublasZgemm(blas.get(),
-                                 CUBLAS_OP_T,
-                                 CUBLAS_OP_N,
-                                 n_,
-                                 n_,
-                                 n_,
-                                 &alpha,
-                                 d_inv_eps.get(),
-                                 n_,
-                                 d_inv_v.get(),
-                                 n_,
-                                 &beta,
-                                 d_w_c.get(),
-                                 n_),
-                     "cublasZgemm(W_c)");
+        scale_columns_by_pi0_kernel<<<blocks, threads>>>(d_w_c.get(), d_pi0.get(), n_);
+        check_cuda(cudaGetLastError(), "scale_columns_by_pi0_kernel");
     }
 
     std::vector<Complex> quadratic_forms_from_device_panel(const cuDoubleComplex* d_x, int nvec) {
@@ -464,8 +448,8 @@ struct DeviceScreeningWorkspace::Impl {
     }
 
     [[nodiscard]] std::size_t estimated_device_bytes() const noexcept {
-        return d_v_ph.bytes() + d_inv_v.bytes() + d_epsilon.bytes() + d_inv_eps.bytes() +
-               d_w_c.bytes() + d_pi0.bytes() + d_work.bytes() + d_x_panel.bytes() +
+        return d_v_ph.bytes() + d_epsilon.bytes() + d_w_c.bytes() + d_pi0.bytes() +
+               d_work.bytes() + d_x_panel.bytes() +
                d_y_panel.bytes() + d_q_panel.bytes() + d_ipiv.bytes() + d_info.bytes();
     }
 
@@ -473,9 +457,7 @@ struct DeviceScreeningWorkspace::Impl {
     CublasHandle blas;
     CusolverHandle solver;
     DeviceComplexBuffer d_v_ph;
-    DeviceComplexBuffer d_inv_v;
     DeviceComplexBuffer d_epsilon;
-    DeviceComplexBuffer d_inv_eps;
     DeviceComplexBuffer d_w_c;
     DeviceComplexBuffer d_pi0;
     DeviceComplexBuffer d_work;

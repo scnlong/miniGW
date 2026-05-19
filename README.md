@@ -392,7 +392,7 @@ For larger runs, the backend is intended to operate across multiple nodes and mu
 
 `--linalg-backend cublas` enables CUDA support when configured with `GW_ENABLE_CUDA=ON`.
 
-The lower-level CUDA backend provides cuBLAS/cuSolver wrappers for replicated host matrices with host-wrapper semantics. The main GW CUDA path uses a dedicated `DeviceScreeningWorkspace`, where `V_ph`, `epsilon`, `inv(epsilon)-I`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU. In MPI mode, each rank owns its own CUDA workspace and processes a subset of the frequency points.
+The lower-level CUDA backend provides cuBLAS/cuSolver wrappers for replicated host matrices with host-wrapper semantics. The main GW CUDA path uses a dedicated `DeviceScreeningWorkspace`, where `V_ph`, the left dielectric matrix `I - diag(Pi0) V_ph`, `W_c`, solver workspaces, and contraction panel buffers are allocated once and reused on the GPU. The CUDA screening path uses the same no-`inv(V_ph)` formulation as the host, ScaLAPACK, and COSMA paths: `W_c = (I - diag(Pi0) V_ph)^(-1) diag(Pi0)`. In MPI mode, each rank owns its own CUDA workspace and processes a subset of the frequency points.
 
 Configure with:
 
