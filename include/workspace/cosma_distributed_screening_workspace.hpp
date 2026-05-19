@@ -26,7 +26,6 @@ public:
 
     [[nodiscard]] std::size_t size() const noexcept { return v_ph_.global_rows(); }
     [[nodiscard]] const matrix::DistributedMatrixComplex& v_ph() const noexcept { return v_ph_; }
-    [[nodiscard]] const matrix::DistributedMatrixComplex& inv_v() const noexcept { return inv_v_; }
     [[nodiscard]] const matrix::DistributedMatrixComplex& w_c() const noexcept { return w_c_; }
     [[nodiscard]] const std::shared_ptr<const matrix::BlacsGrid>& grid() const noexcept { return grid_; }
 
@@ -37,7 +36,6 @@ public:
 private:
     std::shared_ptr<const matrix::BlacsGrid> grid_{};
     matrix::DistributedMatrixComplex v_ph_{};
-    matrix::DistributedMatrixComplex inv_v_{};
     matrix::DistributedMatrixComplex w_c_{};
     int block_size_{64};
 };
