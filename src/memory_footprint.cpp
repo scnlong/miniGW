@@ -61,8 +61,7 @@ long double MemoryFootprint::persistent_runtime_bytes_per_rank() const {
          + pq_ph_tensor_bytes
          + sigma_c_bytes
          + qp_energy_bytes
-         + frequency_grid_bytes
-         + inv_v_bytes;
+         + frequency_grid_bytes;
 }
 
 long double MemoryFootprint::per_frequency_workspace_bytes_one_replica() const {
@@ -88,9 +87,7 @@ long double MemoryFootprint::aggregate_peak_bytes_all_ranks() const {
 
 long double MemoryFootprint::estimated_device_bytes_per_rank() const {
     return device_v_ph_bytes
-         + device_inv_v_bytes
          + device_epsilon_bytes
-         + device_inv_eps_bytes
          + device_w_c_bytes
          + device_pi0_bytes
          + device_solver_workspace_bytes
@@ -147,9 +144,6 @@ MemoryFootprint estimate_memory_footprint(const GwInput& input,
                                    + bytes_for({settings.num_freq_points_total}, sizeof(double))
                                    + bytes_for({settings.num_freq_points_total}, sizeof(Complex));
 
-    // inv(V_ph) is now computed once outside the double frequency loop and kept resident.
-    footprint.inv_v_bytes = bytes_for({n_ph, n_ph}, sizeof(Complex));
-
     footprint.pi0_diag_bytes = bytes_for({n_ph}, sizeof(Complex));
     footprint.pk_vec_bytes = bytes_for({n_ph}, sizeof(double));
     footprint.pk_panel_bytes = bytes_for({n_ph, settings.contraction_panel_size}, sizeof(double));
@@ -158,23 +152,20 @@ MemoryFootprint estimate_memory_footprint(const GwInput& input,
 
     footprint.w_c_matrix_bytes = bytes_for({n_ph, n_ph}, sizeof(Complex));
 
-    // Conservative host-side peak estimate for the current inverse-based
-    // implementation: epsilon, inv_eps, inv_v, returned W_c, an inverse()
-    // argument copy, and inverse() internal work/identity storage. Optimized
-    // solve-based backends can reduce this term; backend-internal workspaces are
-    // not included here.
-    footprint.w_c_construction_peak_bytes = 6.0L * footprint.w_c_matrix_bytes;
-
+    // Conservative host-side peak estimate for the no-inv(V_ph) screening
+    // construction: the left dielectric matrix, W_c / solve right-hand side,
+    // and inverse/solve internal work or identity storage. Backend-internal
+    // workspaces are not included here.
+    footprint.w_c_construction_peak_bytes = 4.0L * footprint.w_c_matrix_bytes;
     if (settings.linalg_backend && settings.linalg_backend->capabilities().uses_device_memory) {
-        // DeviceScreeningWorkspace stores V_ph as complex column-major data and
-        // keeps inv(V_ph), epsilon, inv(epsilon)-I and W_c resident.  cuSolver
-        // workspace is queried at runtime, so use one n_ph^2 complex matrix as
-        // a conservative planning estimate here.  The panel term covers X, Y,
-        // and the small output vector for panel quadratic forms.
+        // DeviceScreeningWorkspace stores V_ph as complex column-major data,
+        // the left dielectric matrix I - diag(Pi0) V_ph, and W_c.  It no longer
+        // keeps inv(V_ph) or inv(epsilon)-I resident.  cuSolver workspace is
+        // queried at runtime, so use one n_ph^2 complex matrix as a conservative
+        // planning estimate here.  The panel term covers X, Y, and the small
+        // output vector for panel quadratic forms.
         footprint.device_v_ph_bytes = footprint.w_c_matrix_bytes;
-        footprint.device_inv_v_bytes = footprint.w_c_matrix_bytes;
         footprint.device_epsilon_bytes = footprint.w_c_matrix_bytes;
-        footprint.device_inv_eps_bytes = footprint.w_c_matrix_bytes;
         footprint.device_w_c_bytes = footprint.w_c_matrix_bytes;
         footprint.device_pi0_bytes = footprint.pi0_diag_bytes;
         footprint.device_solver_workspace_bytes = footprint.w_c_matrix_bytes
@@ -226,7 +217,6 @@ void print_memory_footprint_report(const MemoryFootprint& footprint) {
     std::cout << "  Main GW resident arrays per rank:\n";
     std::cout << "    Sigma_x matrix:               " << format_bytes(footprint.sigma_x_bytes) << '\n';
     std::cout << "    V_ph matrix:                  " << format_bytes(footprint.v_ph_matrix_bytes) << '\n';
-    std::cout << "    inv(V_ph) matrix:             " << format_bytes(footprint.inv_v_bytes) << '\n';
     std::cout << "    pq_ph tensor resident:        " << format_bytes(footprint.pq_ph_tensor_bytes) << '\n';
     std::cout << "    pq_ph tensor avoided:         " << format_bytes(footprint.avoided_materialized_pq_ph_bytes) << '\n';
     std::cout << "    sigma_c(iw) grid:             " << format_bytes(footprint.sigma_c_bytes) << '\n';
@@ -245,9 +235,7 @@ void print_memory_footprint_report(const MemoryFootprint& footprint) {
     if (footprint.estimated_device_bytes_per_rank() > 0.0L) {
         std::cout << "  Estimated GPU device memory per rank:\n";
         std::cout << "    V_ph(device):                 " << format_bytes(footprint.device_v_ph_bytes) << '\n';
-        std::cout << "    inv(V_ph)(device):            " << format_bytes(footprint.device_inv_v_bytes) << '\n';
-        std::cout << "    epsilon(device):              " << format_bytes(footprint.device_epsilon_bytes) << '\n';
-        std::cout << "    inv_eps_minus_I(device):      " << format_bytes(footprint.device_inv_eps_bytes) << '\n';
+		std::cout << "    epsilon_left(device):         " << format_bytes(footprint.device_epsilon_bytes) << '\n';
         std::cout << "    W_c(device):                  " << format_bytes(footprint.device_w_c_bytes) << '\n';
         std::cout << "    pi0(device):                  " << format_bytes(footprint.device_pi0_bytes) << '\n';
         std::cout << "    solver workspace estimate:    " << format_bytes(footprint.device_solver_workspace_bytes) << '\n';
@@ -266,7 +254,7 @@ void print_memory_footprint_report(const MemoryFootprint& footprint) {
     std::cout << "    Estimated peak per rank:      " << format_bytes(footprint.peak_bytes_per_rank()) << '\n';
     std::cout << "    Aggregate across all ranks:   " << format_bytes(footprint.aggregate_peak_bytes_all_ranks()) << '\n';
     std::cout << "  Note: this version no longer materializes the full pq_ph tensor; pk panels are generated on demand.\n"
-              << "        ERI, V_ph, inv(V_ph), and sigma_c may still be replicated depending on the selected backend.\n"
+		      << "        ERI, V_ph, and sigma_c may still be replicated depending on the selected backend.\n"
               << "        MPI frequency parallelism improves time-to-solution but does not reduce per-rank memory.\n"
               << "        The self-energy contraction batches (p,k) vectors into panels; this estimate includes one such panel per workspace replica.\n"
               << "        Host totals exclude allocator overhead, BLAS/LAPACK workspaces, and OS/runtime overhead.\n"
