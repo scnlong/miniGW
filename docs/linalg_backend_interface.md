@@ -55,8 +55,8 @@ public:
 
 The interface is intentionally small.  It covers only the operations currently needed by the host-style GW path:
 
-- `inverse(MatrixComplex)` for dielectric and Coulomb matrix inversions;
-- `gemm(A,B,trans_a,trans_b)` for dense matrix-matrix products such as `(epsilon^{-1}-I)^T * inv(V_ph)` and `W_c * X`;
+- `inverse(MatrixComplex)` for dense linear solves/inversions in local host-style paths;
+- `gemm(A,B,trans_a,trans_b)` for dense matrix-matrix products such as `W_c * X`;
 - `gemv(A,x,trans_a)` for matrix-vector products;
 - `quadratic_form(x,A)` for scalar contractions of the form `x^T A x`.
 
@@ -134,7 +134,7 @@ src/workspace/distributed_screening_workspace.cpp
 The ScaLAPACK support has two layers:
 
 1. A replicated-wrapper backend implementing the generic `gw::linalg::Backend` operations by scattering replicated host matrices to BLACS block-cyclic matrices, calling ScaLAPACK/PBLAS, and gathering results back.
-2. A GW-specific distributed screening workspace that keeps `V_ph`, `epsilon`, `inv(V_ph)`, and `W_c` as distributed matrices during the frequency loop.
+2. A GW-specific distributed screening workspace that keeps `V_ph`, the left dielectric matrix `I - diag(Pi0) V_ph`, and `W_c` as distributed matrices during the frequency loop. It does not explicitly construct `inv(V_ph)`.
 
 The second layer is the important one for memory scaling.  It avoids gathering `W_c` during the self-energy contraction and evaluates panel contractions through distributed GEMM.
 
@@ -164,11 +164,16 @@ rather than relying on ordinary `pzgemm_` symbol interposition.  This makes the 
 COSMA is used for distributed GEMM operations, including:
 
 ```text
-W_c = (epsilon^{-1} - I)^T * inv(V_ph)
-Y   = W_c X
+Y = W_c X
 ```
 
-ScaLAPACK/BLACS infrastructure is still required for descriptors, process grids, and distributed factorization/solve operations.  In particular, COSMA does not replace the dielectric inversion path in this code; it replaces the distributed GEMM provider.
+The COSMA screening workspace uses the same no-`inv(V_ph)` formulation as the host and ScaLAPACK workspaces:
+
+```text
+W_c = (I - diag(Pi0) V_ph)^(-1) diag(Pi0).
+```
+
+ScaLAPACK/BLACS infrastructure is still required for descriptors, process grids, and distributed factorization/solve operations.  In particular, COSMA does not replace the dielectric inversion path in this code; it replaces the distributed GEMM provider for the panel contractions and related distributed products.
 
 In a GPU-enabled COSMA stack, COSMA may use Tiled-MM and CUDA/NCCL internally.  miniGW does not manage COSMA's internal GPU buffers directly; actual GPU execution should be verified with runtime tools such as `nvidia-smi`, Nsight Systems, or COSMA's own diagnostics.
 

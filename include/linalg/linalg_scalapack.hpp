@@ -11,8 +11,9 @@ namespace gw::linalg {
 // This class keeps the legacy replicated MatrixComplex Backend interface for
 // integration tests and non-GW call sites.  The production ScaLAPACK GW path
 // uses matrix::DistributedMatrixComplex and DistributedScreeningWorkspace
-// directly, so V_ph, epsilon, inv(V_ph), and W_c are block-cyclic and are not
-// gathered inside the screening loop.
+// directly, so V_ph, the left dielectric matrix, and W_c are block-cyclic and
+// are not gathered inside the screening loop. The distributed screening path
+// does not explicitly construct inv(V_ph).
 class ScalapackBackend final : public Backend {
 public:
     [[nodiscard]] std::string_view name() const noexcept override;

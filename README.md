@@ -321,7 +321,7 @@ mpirun -np 4 ./build/gw \
 
 ### ScaLAPACK backend
 
-`--linalg-backend scalapack` enables a CPU distributed screening path. In this path, the dominant screening matrices such as `V_ph`, `epsilon`, and `W_c` are represented as BLACS block-cyclic distributed matrices inside `DistributedScreeningWorkspace`. The four-index ERI tensor remains replicated on each MPI rank; ScaLAPACK is used for the screening linear algebra, not for distributed integral storage.
+`--linalg-backend scalapack` enables a CPU distributed screening path. In this path, the dominant screening matrices such as `V_ph`, the left dielectric matrix `I - diag(Pi0) V_ph`, and `W_c` are represented as BLACS block-cyclic distributed matrices inside `DistributedScreeningWorkspace`. The code does not explicitly form `inv(V_ph)` in this path; it computes the correlation screened interaction as `W_c = (I - diag(Pi0) V_ph)^(-1) diag(Pi0)`. The four-index ERI tensor remains replicated on each MPI rank; ScaLAPACK is used for the screening linear algebra, not for distributed integral storage.
 
 Configure with:
 

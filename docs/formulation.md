@@ -110,27 +110,32 @@ The factor of two corresponds to the spin-degenerate closed-shell convention use
 
 ## Dielectric matrix and screened interaction
 
-For each integration frequency `i omega'`, miniGW forms:
+For each integration frequency `i omega'`, miniGW forms the diagonal independent-particle polarizability `D = diag(Pi0)` and uses the left-dielectric representation
 
 ```text
-epsilon = I - V_ph * Pi0
+epsilon_left = I - D V_ph
 ```
 
-where multiplication by `Pi0` means column scaling because `Pi0` is diagonal:
+that is,
 
 ```text
-epsilon[row, col] = delta[row, col] - V_ph[row, col] * Pi0[col]
+epsilon_left[row, col] = delta[row, col] - Pi0[row] * V_ph[row, col].
 ```
 
-The code then computes:
+The host, ScaLAPACK, and COSMA screening workspaces then compute
 
 ```text
-inv_eps = epsilon^{-1}
-inv_eps_minus_I = inv_eps - I
-W_c = inv_eps_minus_I^T * inv(V_ph)
+W_c = epsilon_left^{-1} D
+    = (I - diag(Pi0) V_ph)^(-1) diag(Pi0).
 ```
 
-This expression follows the current code path in `HostScreeningWorkspace`, `DistributedScreeningWorkspace`, and `CosmaDistributedScreeningWorkspace`.
+This replaces the older algebraically equivalent form
+
+```text
+W_c = [(I - V_ph diag(Pi0))^{-1} - I]^T V_ph^{-1}
+```
+
+and avoids explicit construction of `V_ph^{-1}`, which is numerically unsafe in large particle-hole product spaces.
 
 ## Panel contraction for the diagonal correlation self-energy
 

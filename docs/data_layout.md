@@ -159,19 +159,26 @@ nph x nph,  where nph = nocc * nvir
 
 The local host path stores these matrices as replicated `MatrixComplex` objects.  The ScaLAPACK and COSMA distributed paths store the dominant screening matrices as BLACS block-cyclic `DistributedMatrixComplex` objects.
 
-The dielectric matrix is built column-wise with the diagonal independent-particle polarizability:
+The historical right-dielectric form used column scaling by the diagonal independent-particle polarizability:
 
 ```text
-epsilon[row, col] = delta[row, col] - V_ph[row, col] * Pi0[col]
+epsilon_right[row, col] = delta[row, col] - V_ph[row, col] * Pi0[col]
 ```
 
-After inversion, the implemented correlation screened interaction is represented as:
+The current host, ScaLAPACK, and COSMA screening workspaces avoid explicitly forming `V_ph^{-1}`. They instead build the left-dielectric form
 
 ```text
-W_c = (epsilon^{-1} - I)^T * V_ph^{-1}
+epsilon_left[row, col] = delta[row, col] - Pi0[row] * V_ph[row, col]
 ```
 
-using the same row/column convention as the code.
+and compute
+
+```text
+W_c = epsilon_left^{-1} * diag(Pi0)
+    = (I - diag(Pi0) V_ph)^(-1) diag(Pi0).
+```
+
+For nonsingular symmetric `V_ph`, this is algebraically equivalent to the old expression `(epsilon_right^{-1} - I)^T * V_ph^{-1}`, but is numerically safer because it never constructs `V_ph^{-1}`.
 
 ## Panel-based `pq_ph` contraction
 
