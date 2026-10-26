@@ -25,3 +25,10 @@ tags
 *.log
 *.tmp
 *.odt
+
+# agents
+ai/
+CLAUDE.md
+AGENTS.md
+.claude
+.codex
